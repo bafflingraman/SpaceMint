@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="mint_green">#1D9E75</color>
+    <color name="mint_dark">#0F6E56</color>
+    <color name="mint_light">#E8F7F1</color>
+    <color name="white">#FFFFFF</color>
+    <color name="off_white">#F8FAF8</color>
+    <color name="text_primary">#1A1A1A</color>
+    <color name="text_secondary">#777777</color>
+</resources>
