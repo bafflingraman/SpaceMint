@@ -323,11 +323,7 @@ fun SplashScreen(onGetStarted: () -> Unit) {
         Spacer(modifier = Modifier.height(16.dp))
 
         // ── SIGN IN TEXT ──────────────────────────────
-        Text(
-            text = "Already have an account? Sign in",
-            fontSize = 13.sp,
-            color = Color.White.copy(alpha = 0.6f)
-        )
+
     }
 }
 
@@ -380,17 +376,20 @@ fun HomeScreen(
     onViewBin: () -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
+    var showPermissionDialog by remember { mutableStateOf(false) }
 
     val permLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        val granted = permissions.values.any { it }
-        if (granted) Log.d("SpaceMint", "Permission granted")
+        val imagesGranted = permissions[android.Manifest.permission.READ_MEDIA_IMAGES] ?: false
+        val videosGranted = permissions[android.Manifest.permission.READ_MEDIA_VIDEO] ?: false
+        if (!imagesGranted || !videosGranted) {
+            showPermissionDialog = true
+        }
     }
 
     LaunchedEffect(Unit) {
         val perms = mutableListOf<String>()
-
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             if (androidx.core.content.ContextCompat.checkSelfPermission(
                     context, android.Manifest.permission.READ_MEDIA_IMAGES
@@ -406,17 +405,61 @@ fun HomeScreen(
                     context, android.Manifest.permission.POST_NOTIFICATIONS
                 ) != android.content.pm.PackageManager.PERMISSION_GRANTED
             ) perms.add(android.Manifest.permission.POST_NOTIFICATIONS)
-
         } else {
             if (androidx.core.content.ContextCompat.checkSelfPermission(
                     context, android.Manifest.permission.READ_EXTERNAL_STORAGE
                 ) != android.content.pm.PackageManager.PERMISSION_GRANTED
             ) perms.add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
         }
-
         if (perms.isNotEmpty()) {
             permLauncher.launch(perms.toTypedArray())
         }
+    }
+
+    // ── LIMITED ACCESS DIALOG ─────────────────────────────────
+    if (showPermissionDialog) {
+        AlertDialog(
+            onDismissRequest = { showPermissionDialog = false },
+            title = {
+                Text(
+                    text = "Full access needed",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "SpaceMint needs full access to your photos and videos to show all your files for review.\n\nPlease tap 'Open Settings' → tap 'Permissions' → set Photos and Videos to 'Allow all'.",
+                    color = Color(0xFF777777),
+                    lineHeight = 22.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showPermissionDialog = false
+                        val intent = android.content.Intent(
+                            android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                        ).apply {
+                            data = android.net.Uri.fromParts(
+                                "package", context.packageName, null
+                            )
+                        }
+                        context.startActivity(intent)
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MintGreen,
+                        contentColor   = Color.White
+                    )
+                ) {
+                    Text("Open Settings")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPermissionDialog = false }) {
+                    Text("Later", color = Color(0xFF999999))
+                }
+            }
+        )
     }
 
     Column(
@@ -424,7 +467,6 @@ fun HomeScreen(
             .fillMaxSize()
             .background(Color(0xFFF8FAF8))
     ) {
-
         // ── HEADER ───────────────────────────────────
         Column(
             modifier = Modifier
