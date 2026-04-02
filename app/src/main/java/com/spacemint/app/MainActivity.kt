@@ -221,112 +221,90 @@ loop();
 // ─── SCREEN 1: SPLASH ────────────────────────────────────────
 @Composable
 fun SplashScreen(onGetStarted: () -> Unit) {
-    Column(
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(2800L)
+        onGetStarted()
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MintGreen)
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .background(MintGreen),
+        contentAlignment = Alignment.Center
     ) {
-
-        // ── APP ICON BOX ──────────────────────────────
-        Box(
-            modifier = Modifier
-                .size(88.dp)
-                .background(
-                    color = Color.White.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(24.dp)
-                ),
-            contentAlignment = Alignment.Center
+        // main content
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxSize()
         ) {
-            // Phone screen icon
-            androidx.compose.foundation.Canvas(
-                modifier = Modifier.size(52.dp)
+            Spacer(modifier = Modifier.weight(1f))
+
+            // app icon
+            Box(
+                modifier = Modifier
+                    .size(100.dp)
+                    .background(
+                        Color.White.copy(alpha = 0.15f),
+                        RoundedCornerShape(28.dp)
+                    ),
+                contentAlignment = Alignment.Center
             ) {
-                val w = size.width
-                val h = size.height
-                val stroke = androidx.compose.ui.graphics.drawscope.Stroke(
-                    width = 4f,
-                    cap = androidx.compose.ui.graphics.StrokeCap.Round
+                Text(text = "🌿", fontSize = 52.sp)
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(
+                text = "SpaceMint",
+                fontSize = 36.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Your daily space cleaner",
+                fontSize = 15.sp,
+                color = Color.White.copy(alpha = 0.75f)
+            )
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // dedication line at bottom
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(bottom = 48.dp)
+            ) {
+                // thin divider line
+                Box(
+                    modifier = Modifier
+                        .width(40.dp)
+                        .height(1.dp)
+                        .background(Color.White.copy(alpha = 0.4f))
                 )
 
-                // Phone outline
-                drawRoundRect(
-                    color = androidx.compose.ui.graphics.Color.White,
-                    size = androidx.compose.ui.geometry.Size(w, h),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(12f),
-                    style = stroke
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "devoted to mankind",
+                    fontSize = 12.sp,
+                    color = Color.White.copy(alpha = 0.9f),
+                    letterSpacing = 2.sp,
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
                 )
 
-                // Wave line inside phone
-                val path = androidx.compose.ui.graphics.Path().apply {
-                    moveTo(w * 0.2f, h * 0.55f)
-                    cubicTo(
-                        w * 0.35f, h * 0.75f,
-                        w * 0.5f,  h * 0.35f,
-                        w * 0.65f, h * 0.55f
-                    )
-                    cubicTo(
-                        w * 0.78f, h * 0.70f,
-                        w * 0.85f, h * 0.55f,
-                        w * 0.9f,  h * 0.55f
-                    )
-                }
-                drawPath(
-                    path = path,
-                    color = androidx.compose.ui.graphics.Color.White,
-                    style = stroke
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "credited to a stranger",
+                    fontSize = 11.sp,
+                    color = Color.White.copy(alpha = 0.55f),
+                    letterSpacing = 1.5.sp
                 )
             }
         }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // ── APP NAME ──────────────────────────────────
-        Text(
-            text = "SpaceMint",
-            fontSize = 40.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // ── TAGLINE ───────────────────────────────────
-        Text(
-            text = "Clean your phone,\na little every day",
-            fontSize = 16.sp,
-            color = Color.White.copy(alpha = 0.8f),
-            textAlign = TextAlign.Center,
-            lineHeight = 24.sp
-        )
-
-        Spacer(modifier = Modifier.height(60.dp))
-
-        // ── GET STARTED BUTTON ────────────────────────
-        Button(
-            onClick = onGetStarted,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.White,
-                contentColor = MintGreen
-            )
-        ) {
-            Text(
-                text = "Get Started",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // ── SIGN IN TEXT ──────────────────────────────
-
     }
 }
 
