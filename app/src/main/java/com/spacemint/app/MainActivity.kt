@@ -36,6 +36,9 @@ import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.viewinterop.AndroidView
 import android.content.Intent
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
 
 val MintGreen = Color(0xFF1D9E75)
 val MintDark  = Color(0xFF0F6E56)
@@ -649,8 +652,19 @@ fun HomeScreen(
                 fontSize = 14.sp
             )
         }
+        // ── BANNER IMAGE ──────────────────────────────
+        Spacer(modifier = Modifier.height(12.dp))
+        Image(
+            painter = painterResource(id = R.drawable.spacemint_banner),
+            contentDescription = "SpaceMint",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(170.dp)
+        )
 
         Spacer(modifier = Modifier.height(8.dp))
+
 
         // ── BINRUN GAME ───────────────────────────────
         BinRunGame()
