@@ -126,5 +126,28 @@ object NotificationHelper {
             Context.NOTIFICATION_SERVICE
         ) as NotificationManager
         manager.notify(notifId, notification)
+    }fun sendCustomNotification(context: Context, title: String, message: String) {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pending = PendingIntent.getActivity(
+            context, 99, intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(pending)
+            .setAutoCancel(true)
+            .build()
+
+        val manager = context.getSystemService(
+            Context.NOTIFICATION_SERVICE
+        ) as NotificationManager
+        manager.notify(3001, notification)
     }
 }

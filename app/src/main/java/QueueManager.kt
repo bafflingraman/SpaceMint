@@ -22,17 +22,20 @@ object QueueManager {
 
         var unseen = allFiles.filter { it.uri?.toString() !in seenIds }
 
-        // full cycle done — reset
         if (unseen.isEmpty()) {
             prefs.edit().remove(KEY_SEEN).apply()
             unseen = allFiles.shuffled()
             Log.d("QueueManager", "Full cycle done — resetting")
         }
 
-        // ── SMART SIZE PICKING ────────────────────────────────────
-        // parse size string back to bytes for sorting
+        // ── GET TARGET ────────────────────────────────────────────
+        val targetMB = TargetManager.getCurrentTarget(context)
+        val targetBytes = (targetMB * 1_000_000).toLong()
+
+        // parse size string to bytes
         fun sizeToBytes(size: String): Long {
-            val num = size.replace(" GB","").replace(" MB","")
+            val num = size
+                .replace(" GB","").replace(" MB","")
                 .replace(" KB","").replace(" B","")
                 .toDoubleOrNull() ?: 0.0
             return when {
@@ -43,46 +46,64 @@ object QueueManager {
             }
         }
 
-        // split unseen into 3 buckets
-        val large  = unseen.filter { sizeToBytes(it.size) >= 10_000_000 }.shuffled() // 10MB+
-        val medium = unseen.filter { sizeToBytes(it.size) in 1_000_000..9_999_999 }.shuffled() // 1-10MB
-        val small  = unseen.filter { sizeToBytes(it.size) < 1_000_000 }.shuffled() // under 1MB
+        // ── SMART BUCKET PICKING BASED ON TARGET ──────────────────
+        val ultraLarge = unseen.filter { sizeToBytes(it.size) >= 50_000_000 }.shuffled()  // 50MB+
+        val large      = unseen.filter { sizeToBytes(it.size) in 10_000_000..49_999_999 }.shuffled() // 10-50MB
+        val medium     = unseen.filter { sizeToBytes(it.size) in 1_000_000..9_999_999 }.shuffled()   // 1-10MB
+        val small      = unseen.filter { sizeToBytes(it.size) < 1_000_000 }.shuffled()    // under 1MB
 
-        Log.d("QueueManager", "Buckets — large:${large.size} medium:${medium.size} small:${small.size}")
-
-        // build smart batch — 1 large, 2 medium, 2 small
         val batch = mutableListOf<ReviewFile>()
 
-        // take 1 large
-        batch.addAll(large.take(1))
+        when {
+            // aggressive target 75MB+ — prioritise ultra large and large
+            targetMB >= 75f -> {
+                batch.addAll(ultraLarge.take(1))
+                batch.addAll(large.take(2))
+                batch.addAll(medium.take(1))
+                batch.addAll(small.take(1))
+            }
+            // active target 50-75MB
+            targetMB >= 50f -> {
+                batch.addAll(ultraLarge.take(1))
+                batch.addAll(large.take(1))
+                batch.addAll(medium.take(2))
+                batch.addAll(small.take(1))
+            }
+            // moderate target 25-50MB
+            targetMB >= 25f -> {
+                batch.addAll(large.take(1))
+                batch.addAll(medium.take(2))
+                batch.addAll(small.take(2))
+            }
+            // light target under 25MB
+            else -> {
+                batch.addAll(medium.take(2))
+                batch.addAll(small.take(3))
+            }
+        }
 
-        // take 2 medium
-        batch.addAll(medium.take(2))
-
-        // take 2 small
-        batch.addAll(small.take(2))
-
-        // if batch not full — fill with whatever unseen files remain
+        // fill remaining slots if buckets were empty
         if (batch.size < batchSize) {
-            val alreadyPicked = batch.map { it.uri?.toString() }.toSet()
+            val picked = batch.map { it.uri?.toString() }.toSet()
             val remaining = unseen
-                .filter { it.uri?.toString() !in alreadyPicked }
+                .filter { it.uri?.toString() !in picked }
                 .shuffled()
                 .take(batchSize - batch.size)
             batch.addAll(remaining)
         }
 
-        // shuffle the final batch so large file isn't always first
         val finalBatch = batch.shuffled()
 
         // mark as seen
         val newSeen = seenIds.toMutableSet()
-        finalBatch.forEach { file ->
-            file.uri?.toString()?.let { id -> newSeen.add(id) }
-        }
+        finalBatch.forEach { it.uri?.toString()?.let { id -> newSeen.add(id) } }
         prefs.edit().putStringSet(KEY_SEEN, newSeen).apply()
 
-        Log.d("QueueManager", "Batch: ${finalBatch.size} files — ${newSeen.size}/${allFiles.size} seen")
+        // record actual MB shown for auto adjustment
+        val actualMB = finalBatch.sumOf { sizeToBytes(it.size) } / 1_000_000f
+        TargetManager.recordSession(context, actualMB)
+
+        Log.d("QueueManager", "Target: $targetMB MB — Actual: $actualMB MB — Batch: ${finalBatch.size}")
         return finalBatch
     }
 

@@ -311,6 +311,14 @@ fun SplashScreen(onGetStarted: () -> Unit) {
 // ─── SCREEN 2: ONBOARDING ─────────────────────────────────────
 @Composable
 fun OnboardingScreen(onDone: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var targetMB by remember {
+        mutableStateOf(
+            context.getSharedPreferences("spacemint_target", android.content.Context.MODE_PRIVATE)
+                .getFloat("target_mb", 50f)
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -327,7 +335,9 @@ fun OnboardingScreen(onDone: () -> Unit) {
             textAlign = TextAlign.Center,
             lineHeight = 36.sp
         )
-        Spacer(modifier = Modifier.height(16.dp))
+
+        Spacer(modifier = Modifier.height(12.dp))
+
         Text(
             text = "Old screenshots. Duplicate photos.\nDownloads you never opened.\nSpaceMint helps you clear them — slowly, safely, every day.",
             fontSize = 15.sp,
@@ -335,17 +345,126 @@ fun OnboardingScreen(onDone: () -> Unit) {
             textAlign = TextAlign.Center,
             lineHeight = 24.sp
         )
-        Spacer(modifier = Modifier.height(60.dp))
+
+        Spacer(modifier = Modifier.height(40.dp))
+
+        // ── TARGET SLIDER ─────────────────────────────
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            border = androidx.compose.foundation.BorderStroke(
+                0.5.dp, Color(0xFFE0E0E0)
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Daily clean target",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1A1A1A)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .background(MintGreen, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "~${targetMB.toInt()} MB / day",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Slider(
+                    value = targetMB,
+                    onValueChange = { targetMB = it },
+                    valueRange = 10f..100f,
+                    steps = 8,
+                    colors = SliderDefaults.colors(
+                        thumbColor        = MintGreen,
+                        activeTrackColor  = MintGreen,
+                        inactiveTrackColor= Color(0xFFE0E0E0)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "10 MB",
+                        fontSize = 11.sp,
+                        color = Color(0xFFAAAAAA)
+                    )
+                    Text(
+                        text = "100 MB",
+                        fontSize = 11.sp,
+                        color = Color(0xFFAAAAAA)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // description based on target
+                Text(
+                    text = when {
+                        targetMB < 25f -> "Light — mostly screenshots and small photos"
+                        targetMB < 50f -> "Moderate — mix of photos and documents"
+                        targetMB < 75f -> "Active — includes larger photos and short videos"
+                        else           -> "Aggressive — targets large videos and files"
+                    },
+                    fontSize = 12.sp,
+                    color = Color(0xFF777777),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
         Button(
-            onClick = onDone,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
+            onClick = {
+                // save target to prefs
+                val prefs = context.getSharedPreferences(
+                    "spacemint_target", android.content.Context.MODE_PRIVATE
+                )
+                prefs.edit()
+                    .putFloat("target_mb", targetMB)
+                    .putFloat("current_target_mb", targetMB)
+                    .apply()
+                onDone()
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = MintGreen,
-                contentColor = Color.White
+                contentColor   = Color.White
             )
         ) {
-            Text(text = "Let's clean it up", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(
+                text = "Let's clean it up",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }
