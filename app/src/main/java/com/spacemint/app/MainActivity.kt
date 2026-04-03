@@ -749,16 +749,100 @@ fun HomeScreen(
                 fontSize = 14.sp
             )
         }
-        // ── BANNER IMAGE ──────────────────────────────
-        Spacer(modifier = Modifier.height(12.dp))
-        Image(
-            painter = painterResource(id = R.drawable.spacemint_banner),
-            contentDescription = "SpaceMint",
-            contentScale = ContentScale.Crop,
+        // ── DAILY TARGET BAR ─────────────────────────
+        var targetMB by remember {
+            mutableStateOf(
+                context.getSharedPreferences(
+                    "spacemint_target", android.content.Context.MODE_PRIVATE
+                ).getFloat("target_mb", 50f)
+            )
+        }
+
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(170.dp)
-        )
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            border = androidx.compose.foundation.BorderStroke(
+                0.5.dp, Color(0xFFE0E0E0)
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Daily clean target",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1A1A1A)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .background(MintGreen, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "~${targetMB.toInt()} MB / day",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Slider(
+                    value = targetMB,
+                    onValueChange = {
+                        targetMB = it
+                        TargetManager.setUserTarget(context, it)
+                    },
+                    valueRange = 10f..100f,
+                    steps = 8,
+                    colors = SliderDefaults.colors(
+                        thumbColor         = MintGreen,
+                        activeTrackColor   = MintGreen,
+                        inactiveTrackColor = Color(0xFFE0E0E0)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(text = "10 MB", fontSize = 10.sp, color = Color(0xFFAAAAAA))
+                    Text(text = "100 MB", fontSize = 10.sp, color = Color(0xFFAAAAAA))
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = when {
+                        targetMB < 25f -> "Light — mostly screenshots and small photos"
+                        targetMB < 50f -> "Moderate — mix of photos and documents"
+                        targetMB < 75f -> "Active — includes larger photos and short videos"
+                        else           -> "Aggressive — targets large videos and files"
+                    },
+                    fontSize = 11.sp,
+                    color = Color(0xFF999999),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+
+
 
         Spacer(modifier = Modifier.height(8.dp))
 
