@@ -2,7 +2,6 @@ package com.spacemint.app
 
 import android.app.AlarmManager
 import android.app.PendingIntent
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -11,29 +10,26 @@ import java.util.Calendar
 
 object NotificationScheduler {
 
-    private const val PREFS_NAME         = "spacemint_notifications"
-    private const val KEY_SESSION_DONE   = "session_done_date"
-    private const val KEY_MORNING_HOUR   = "morning_hour"
-    private const val KEY_MORNING_MIN    = "morning_min"
-    private const val KEY_EVENING_HOUR   = "evening_hour"
-    private const val KEY_EVENING_MIN    = "evening_min"
+    private const val PREFS_NAME       = "spacemint_notifications"
+    private const val KEY_SESSION_DONE = "session_done_date"
+    private const val KEY_MORNING_HOUR = "morning_hour"
+    private const val KEY_MORNING_MIN  = "morning_min"
+    private const val KEY_EVENING_HOUR = "evening_hour"
+    private const val KEY_EVENING_MIN  = "evening_min"
 
     private const val ALARM_MORNING = 1001
     private const val ALARM_EVENING = 1002
 
     // ── DEFAULT TIMES ─────────────────────────────────────────
-    // Morning: random between 10:00 and 12:00
-    // Evening: random between 17:00 and 18:00
-    private fun defaultMorningHour() = (10..11).random()
-    private fun defaultMorningMin()  = listOf(0, 15, 30, 45).random()
+    private fun defaultMorningHour() = 10
+    private fun defaultMorningMin()  = 0
     private fun defaultEveningHour() = 17
-    private fun defaultEveningMin()  = listOf(0, 15, 30).random()
+    private fun defaultEveningMin()  = 0
 
     // ── SCHEDULE BOTH ALARMS ──────────────────────────────────
     fun scheduleDailyAlarms(context: Context) {
         val prefs = prefs(context)
 
-        // get user preferred times or use defaults
         val morningHour = prefs.getInt(KEY_MORNING_HOUR, defaultMorningHour())
         val morningMin  = prefs.getInt(KEY_MORNING_MIN,  defaultMorningMin())
         val eveningHour = prefs.getInt(KEY_EVENING_HOUR, defaultEveningHour())
@@ -53,13 +49,12 @@ object NotificationScheduler {
         Log.d("Scheduler", "Alarms set — morning $morningHour:$morningMin — evening $eveningHour:$eveningMin")
     }
 
-    // ── SCHEDULE MORNING ALARM ────────────────────────────────
-    private fun scheduleMorning(context: Context, hour: Int, min: Int) {
+    // ── SCHEDULE MORNING ──────────────────────────────────────
+    internal fun scheduleMorning(context: Context, hour: Int, min: Int) {
         val calendar = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, hour)
             set(Calendar.MINUTE, min)
             set(Calendar.SECOND, 0)
-            // if time already passed today — schedule for tomorrow
             if (before(Calendar.getInstance())) add(Calendar.DAY_OF_YEAR, 1)
         }
 
@@ -78,10 +73,11 @@ object NotificationScheduler {
             AlarmManager.INTERVAL_DAY,
             pending
         )
+        Log.d("Scheduler", "Morning alarm set for $hour:$min")
     }
 
-    // ── SCHEDULE EVENING ALARM ────────────────────────────────
-    private fun scheduleEvening(context: Context, hour: Int, min: Int) {
+    // ── SCHEDULE EVENING ──────────────────────────────────────
+    internal fun scheduleEvening(context: Context, hour: Int, min: Int) {
         val calendar = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, hour)
             set(Calendar.MINUTE, min)
@@ -104,10 +100,10 @@ object NotificationScheduler {
             AlarmManager.INTERVAL_DAY,
             pending
         )
+        Log.d("Scheduler", "Evening alarm set for $hour:$min")
     }
 
     // ── MARK SESSION COMPLETE ─────────────────────────────────
-    // Call this when user finishes reviewing 5 photos
     fun markSessionComplete(context: Context) {
         val today = todayString()
         prefs(context).edit()
@@ -122,7 +118,7 @@ object NotificationScheduler {
         return done == todayString()
     }
 
-    // ── CANCEL EVENING if morning session done ─────────────────
+    // ── CANCEL EVENING IF DONE ────────────────────────────────
     fun cancelEveningIfDone(context: Context) {
         if (isSessionDoneToday(context)) {
             val intent = Intent(context, NotificationReceiver::class.java)
@@ -132,7 +128,7 @@ object NotificationScheduler {
             )
             val alarm = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             pending?.let { alarm.cancel(it) }
-            Log.d("Scheduler", "Evening notification cancelled — session already done")
+            Log.d("Scheduler", "Evening cancelled — session done")
 
             // reschedule evening for tomorrow
             val prefs = prefs(context)
@@ -142,8 +138,8 @@ object NotificationScheduler {
         }
     }
 
-    // ── GET / SET USER PREFERRED TIMES ────────────────────────
-    fun getMorningTime(context: Context): Pair<Int,Int> {
+    // ── GET TIMES ─────────────────────────────────────────────
+    fun getMorningTime(context: Context): Pair<Int, Int> {
         val p = prefs(context)
         return Pair(
             p.getInt(KEY_MORNING_HOUR, defaultMorningHour()),
@@ -151,7 +147,7 @@ object NotificationScheduler {
         )
     }
 
-    fun getEveningTime(context: Context): Pair<Int,Int> {
+    fun getEveningTime(context: Context): Pair<Int, Int> {
         val p = prefs(context)
         return Pair(
             p.getInt(KEY_EVENING_HOUR, defaultEveningHour()),
@@ -159,6 +155,7 @@ object NotificationScheduler {
         )
     }
 
+    // ── SET TIMES ─────────────────────────────────────────────
     fun setMorningTime(context: Context, hour: Int, min: Int) {
         prefs(context).edit()
             .putInt(KEY_MORNING_HOUR, hour)

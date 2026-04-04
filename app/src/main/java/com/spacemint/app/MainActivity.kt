@@ -41,6 +41,24 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.foundation.layout.ColumnScope
+
 
 val MintGreen = Color(0xFF1D9E75)
 val MintDark  = Color(0xFF0F6E56)
@@ -80,13 +98,879 @@ class MainActivity : ComponentActivity() {
         NotificationHelper.createChannel(this)
         NotificationScheduler.scheduleDailyAlarms(this)
 
-        // ── TEMP TEST — remove after testing ──────────
-       // android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-         //   NotificationHelper.sendReminder(this, isMorning = true)
-      //  }, 5000L) // fires after 5 seconds
+        // ask Samsung users to disable battery optimization
+        if (android.os.Build.MANUFACTURER.lowercase() == "samsung") {
+            val pm = getSystemService(android.content.Context.POWER_SERVICE)
+                    as android.os.PowerManager
+            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                try {
+                    val intent = android.content.Intent(
+                        android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+                    ).apply {
+                        data = android.net.Uri.parse("package:$packageName")
+                    }
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    android.util.Log.e("MainActivity", "Battery opt error: ${e.message}")
+                }
+            }
+        }
     }
 
 } // ← class ends here
+@Composable
+fun GuideScreen(onFinished: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var currentPage by remember { mutableStateOf(0) }
+    var canAdvance by remember { mutableStateOf(false) }
+    val totalPages = 4
+
+    // after 2 seconds — unlock tap to advance
+    LaunchedEffect(currentPage) {
+        canAdvance = false
+        kotlinx.coroutines.delay(2000L)
+        canAdvance = true
+    }
+
+    val pages = listOf(
+        GuidePageData(
+            emoji       = "",
+            title       = "Your storage at a glance",
+            description = "SpaceMint shows how full your phone is and tracks how much space you free over time.",
+            bgColor     = MintGreen,
+            content     = {}
+        ),
+        GuidePageData(
+            emoji       = "",
+            title       = "Keep or delete — you decide",
+            description = "Each file is shown one by one. Tap Delete to remove it or Keep to leave it. Simple as that.",
+            bgColor     = MintGreen,
+            content     = {}
+        ),
+        GuidePageData(
+            emoji       = "",
+            title       = "Two reminders a day",
+            description = "A morning reminder and an evening reminder. Tap the notification and you land directly on the review screen.",
+            bgColor     = MintGreen,
+            content     = {}
+        ),
+        GuidePageData(
+            emoji       = "",
+            title       = "Small habit. Real results.",
+            description = "5 files a day does not sound like much. But slowly, with time, SpaceMint will clean your entire phone without you even noticing.",
+            bgColor     = MintGreen,
+            content     = {}
+        )
+    )
+
+    val page = pages[currentPage]
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MintGreen)
+            .clickable {
+                // only advance if 2 seconds have passed
+                if (canAdvance) {
+                    if (currentPage < totalPages - 1) {
+                        currentPage++
+                    } else {
+                        OnboardingGuide.markShown(context)
+                        onFinished()
+                    }
+                }
+            }
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+
+            // ── PROGRESS DOTS ─────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 52.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                repeat(totalPages) { index ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(
+                                if (index <= currentPage)
+                                    Color.White
+                                else
+                                    Color.White.copy(alpha = 0.3f)
+                            )
+                    )
+                }
+            }
+
+            // ── SKIP ──────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(end = 16.dp, top = 8.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = {
+                    OnboardingGuide.markShown(context)
+                    onFinished()
+                }) {
+                    Text(
+                        text = "Skip",
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 13.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // ── PHONE MOCKUP ──────────────────────────
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(0.65f),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(210.dp)
+                        .height(380.dp)
+                        .background(Color(0xFF0F6E56), RoundedCornerShape(32.dp))
+                        .border(
+                            width = 3.dp,
+                            color = Color.White.copy(alpha = 0.3f),
+                            shape = RoundedCornerShape(32.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(196.dp)
+                            .height(366.dp)
+                            .clip(RoundedCornerShape(26.dp))
+                            .background(Color(0xFFF8FAF8)),
+                        contentAlignment = Alignment.TopCenter
+                    ) {
+                        when (currentPage) {
+
+                            // ── PAGE 1 — Home ─────────
+                            0 -> Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(10.dp)
+                            ) {
+                                Text(
+                                    text = "SpaceMint",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MintGreen,
+                                    modifier = Modifier.padding(start = 4.dp)
+                                )
+                                Text(
+                                    text = "Your daily space cleaner",
+                                    fontSize = 7.sp,
+                                    color = Color(0xFF999999),
+                                    modifier = Modifier.padding(start = 4.dp)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                // storage card
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(50.dp)
+                                        .background(Color.White, RoundedCornerShape(8.dp))
+                                        .border(0.5.dp, Color(0xFFE0E0E0), RoundedCornerShape(8.dp))
+                                        .padding(8.dp)
+                                ) {
+                                    Column {
+                                        Text(text = "Phone storage", fontSize = 6.sp, color = Color(0xFF999999))
+                                        Text(text = "116.5 GB of 240 GB used", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A1A))
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Box(modifier = Modifier.fillMaxWidth().height(4.dp).background(Color(0xFFEEEEEE), RoundedCornerShape(99.dp))) {
+                                            Box(modifier = Modifier.fillMaxWidth(0.48f).height(4.dp).background(MintGreen, RoundedCornerShape(99.dp)))
+                                        }
+                                        Text(text = "124.0 GB free", fontSize = 6.sp, color = MintGreen)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                // session card
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(58.dp)
+                                        .background(MintGreen, RoundedCornerShape(8.dp))
+                                        .padding(8.dp)
+                                ) {
+                                    Column {
+                                        Text(text = "Session ready", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        Text(text = "5 files - under 60 seconds", fontSize = 6.sp, color = Color.White.copy(alpha = 0.8f))
+                                        Spacer(modifier = Modifier.height(5.dp))
+                                        Box(modifier = Modifier.background(Color.White, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+                                            Text(text = "Start reviewing", fontSize = 6.sp, color = MintGreen, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                // stats
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    listOf("61 MB\nfreed", "35\ndeleted", "1\nday streak").forEach { stat ->
+                                        Box(modifier = Modifier.weight(1f).height(32.dp).background(Color.White, RoundedCornerShape(6.dp)).border(0.5.dp, Color(0xFFE0E0E0), RoundedCornerShape(6.dp)), contentAlignment = Alignment.Center) {
+                                            Text(text = stat, fontSize = 6.sp, textAlign = TextAlign.Center, color = Color(0xFF1A1A1A), lineHeight = 9.sp)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ── PAGE 2 — Review ───────
+                            1 -> Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(10.dp)
+                            ) {
+                                Text(text = "Review session", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A1A))
+                                Text(text = "3 of 5", fontSize = 7.sp, color = Color(0xFF999999))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                    listOf(MintGreen, MintGreen, Color(0xFFEF9F27), Color(0xFFE0E0E0), Color(0xFFE0E0E0)).forEach { c ->
+                                        Box(modifier = Modifier.weight(1f).height(3.dp).background(c, RoundedCornerShape(99.dp)))
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                // photo area
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(150.dp)
+                                        .background(Color(0xFFDDE8DD), RoundedCornerShape(8.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                            Box(modifier = Modifier.size(42.dp).background(Color(0xFFB8D4B8), RoundedCornerShape(6.dp)))
+                                            Box(modifier = Modifier.size(42.dp).background(Color(0xFFD4C4A8), RoundedCornerShape(6.dp)))
+                                            Box(modifier = Modifier.size(42.dp).background(Color(0xFFA8C4D4), RoundedCornerShape(6.dp)))
+                                        }
+                                        Spacer(modifier = Modifier.height(5.dp))
+                                        Text(text = "Tap to view full screen", fontSize = 5.sp, color = Color(0xFF999999))
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(5.dp))
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Column {
+                                        Text(text = "IMG_20240901.jpg", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A1A))
+                                        Text(text = "1 Sept 2024", fontSize = 6.sp, color = Color(0xFF999999))
+                                    }
+                                    Box(modifier = Modifier.background(Color(0xFFFFEDED), RoundedCornerShape(4.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
+                                        Text(text = "4.2 MB", fontSize = 7.sp, color = Color(0xFFA32D2D), fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(5.dp))
+                                Box(modifier = Modifier.fillMaxWidth().background(Color(0xFFFAEEDA), RoundedCornerShape(6.dp)).padding(5.dp)) {
+                                    Text(text = "Old photo — consider if you still need this", fontSize = 6.sp, color = Color(0xFF854F0B))
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Box(modifier = Modifier.weight(1f).height(30.dp).background(Color(0xFFFFEDED), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+                                        Text(text = "Delete", fontSize = 7.sp, color = Color(0xFFA32D2D), fontWeight = FontWeight.Bold)
+                                    }
+                                    Box(modifier = Modifier.weight(1f).height(30.dp).background(Color(0xFFE8F7F1), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+                                        Text(text = "Keep", fontSize = 7.sp, color = MintGreen, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
+                            // ── PAGE 3 — Notifications ─
+                            2 -> Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color.White, RoundedCornerShape(10.dp))
+                                        .border(0.5.dp, Color(0xFFE0E0E0), RoundedCornerShape(10.dp))
+                                        .padding(10.dp)
+                                ) {
+                                    Column {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                            Box(modifier = Modifier.size(12.dp).background(MintGreen, RoundedCornerShape(3.dp)))
+                                            Text(text = "SpaceMint", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A1A))
+                                            Text(text = "now", fontSize = 6.sp, color = Color(0xFF999999))
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(text = "Good morning. Time to clean up.", fontSize = 7.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A1A))
+                                        Text(text = "5 files waiting. Takes under 2 minutes.", fontSize = 6.sp, color = Color(0xFF777777))
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                            Box(modifier = Modifier.background(MintGreen, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+                                                Text(text = "Review Now", fontSize = 6.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                            }
+                                            Box(modifier = Modifier.background(Color(0xFFEEEEEE), RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+                                                Text(text = "Later", fontSize = 6.sp, color = Color(0xFF777777))
+                                            }
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(14.dp))
+                                Text(text = "Tap Review Now", fontSize = 7.sp, color = Color.White.copy(alpha = 0.6f))
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(text = "↓", fontSize = 20.sp, color = Color.White.copy(alpha = 0.5f))
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(55.dp)
+                                        .background(MintGreen.copy(alpha = 0.7f), RoundedCornerShape(10.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(text = "Review session opens", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        Text(text = "No home screen. Straight to files.", fontSize = 6.sp, color = Color.White.copy(alpha = 0.8f))
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    listOf("Morning  10 - 12 AM", "Evening  5 - 6 PM").forEach { time ->
+                                        Box(modifier = Modifier.weight(1f).background(Color.White, RoundedCornerShape(6.dp)).border(0.5.dp, Color(0xFFE0E0E0), RoundedCornerShape(6.dp)).padding(6.dp), contentAlignment = Alignment.Center) {
+                                            Text(text = time, fontSize = 6.sp, color = Color(0xFF1A1A1A), textAlign = TextAlign.Center, lineHeight = 9.sp)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ── PAGE 4 — Concept ──────
+                            3 -> Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                listOf(
+                                    Pair("5", "files reviewed every day"),
+                                    Pair("365", "days in a year"),
+                                    Pair("1,825", "files in 5 years")
+                                ).forEachIndexed { index, stat ->
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp)
+                                            .background(
+                                                MintGreen.copy(alpha = if (index == 2) 0.25f else 0.12f),
+                                                RoundedCornerShape(8.dp)
+                                            )
+                                            .padding(10.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = stat.first,
+                                                fontSize = if (index == 2) 16.sp else 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF1A1A1A)
+                                            )
+                                            Text(
+                                                text = stat.second,
+                                                fontSize = 7.sp,
+                                                color = Color(0xFF555555)
+                                            )
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color.White, RoundedCornerShape(8.dp))
+                                        .padding(10.dp)
+                                ) {
+                                    Text(
+                                        text = "You will not feel it happening. But slowly, with time, your phone will get cleaner every single day.",
+                                        fontSize = 7.sp,
+                                        color = Color(0xFF555555),
+                                        textAlign = TextAlign.Center,
+                                        lineHeight = 11.sp,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
+                        }
+
+                        // notch
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 6.dp)
+                                .width(40.dp)
+                                .height(6.dp)
+                                .background(Color(0xFF0F6E56), RoundedCornerShape(99.dp))
+                        )
+                    }
+                }
+            }
+
+            // ── BOTTOM TEXT ───────────────────────────
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(0.35f)
+                    .padding(horizontal = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = page.title,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = page.description,
+                    fontSize = 13.sp,
+                    color = Color.White.copy(alpha = 0.8f),
+                    textAlign = TextAlign.Center,
+                    lineHeight = 20.sp
+                )
+
+                // tap hint — shows when unlocked
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = if (canAdvance) {
+                        if (currentPage == totalPages - 1) "Tap anywhere to get started"
+                        else "Tap anywhere to continue"
+                    } else {
+                        "..."
+                    },
+                    fontSize = 11.sp,
+                    color = Color.White.copy(alpha = if (canAdvance) 0.6f else 0.3f)
+                )
+
+                if (currentPage == totalPages - 1 && canAdvance) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = {
+                            OnboardingGuide.markShown(context)
+                            onFinished()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color.White,
+                            contentColor   = MintGreen
+                        )
+                    ) {
+                        Text(
+                            text = "Let's get started",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+data class GuidePageData(
+    val emoji: String,
+    val title: String,
+    val description: String,
+    val bgColor: Color,
+    val content: @Composable () -> Unit
+)
+
+// ── PAGE CONTENT COMPOSABLES ──────────────────────────────
+
+@Composable
+fun StoragePageContent() {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        // mock storage card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.White.copy(alpha = 0.15f)
+            ),
+            elevation = CardDefaults.cardElevation(0.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Phone storage",
+                    fontSize = 11.sp,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "116 GB of 240 GB used",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(7.dp)
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(Color.White.copy(alpha = 0.2f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(0.48f)
+                            .fillMaxHeight()
+                            .background(Color.White)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "124 GB free",
+                    fontSize = 11.sp,
+                    color = Color.White.copy(alpha = 0.8f)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // mock stats row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf(
+                Pair("61 MB", "freed"),
+                Pair("35", "deleted"),
+                Pair("🔥 7", "streak")
+            ).forEach { (num, label) ->
+                Card(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.White.copy(alpha = 0.15f)
+                    ),
+                    elevation = CardDefaults.cardElevation(0.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = num,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = label,
+                            fontSize = 9.sp,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ReviewPageContent() {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        // mock file card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.White.copy(alpha = 0.15f)
+            ),
+            elevation = CardDefaults.cardElevation(0.dp)
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // mock thumbnail
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                        .background(Color.White.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "📸", fontSize = 48.sp)
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(8.dp)
+                            .background(
+                                Color.Black.copy(alpha = 0.4f),
+                                RoundedCornerShape(6.dp)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "Tap to view full",
+                            fontSize = 9.sp,
+                            color = Color.White
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "IMG_2024_photo.jpg",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                Color.White.copy(alpha = 0.2f),
+                                RoundedCornerShape(6.dp)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text(text = "4.2 MB", fontSize = 10.sp, color = Color.White)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // mock delete keep buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp)
+                    .background(
+                        Color.White.copy(alpha = 0.2f),
+                        RoundedCornerShape(14.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = "🗑", fontSize = 18.sp)
+                    Text(
+                        text = "Delete",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp)
+                    .background(
+                        Color.White.copy(alpha = 0.2f),
+                        RoundedCornerShape(14.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = "✓", fontSize = 18.sp, color = Color.White)
+                    Text(
+                        text = "Keep",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun NotificationPageContent() {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        // mock notification
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.White.copy(alpha = 0.15f)
+            ),
+            elevation = CardDefaults.cardElevation(0.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(
+                            Color.White.copy(alpha = 0.2f),
+                            RoundedCornerShape(10.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "🌿", fontSize = 20.sp)
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Good morning! Time to breathe 🌿",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "5 files waiting. Takes under 60 seconds!",
+                        fontSize = 11.sp,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .background(
+                            Color.White.copy(alpha = 0.25f),
+                            RoundedCornerShape(8.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = "Review Now",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .background(
+                            Color.White.copy(alpha = 0.1f),
+                            RoundedCornerShape(8.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = "Later",
+                        fontSize = 11.sp,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // arrow pointing down
+        Text(
+            text = "↓ tap to open 5 files instantly",
+            fontSize = 13.sp,
+            color = Color.White.copy(alpha = 0.7f),
+            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+        )
+    }
+}
+
+@Composable
+fun ConceptPageContent() {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        // big numbers
+        data class StatItem(val num: String, val label: String)
+        val statItems = listOf(
+            StatItem("5", "files reviewed daily"),
+            StatItem("365", "days in a year"),
+            StatItem("1,825", "files reviewed — forever clean")
+        )
+        statItems.forEachIndexed { index, stat ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.White.copy(
+                        alpha = if (index == 2) 0.25f else 0.15f
+                    )
+                ),
+                elevation = CardDefaults.cardElevation(0.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stat.num,
+                        fontSize = if (index == 2) 26.sp else 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = stat.label,
+                        fontSize = 12.sp,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "Small habit. Permanent result.",
+            fontSize = 13.sp,
+            color = Color.White.copy(alpha = 0.6f),
+            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+        )
+    }
+}
 
 @Composable
 fun AppNavigation(startDestination: String = "splash") {
@@ -97,8 +981,15 @@ fun AppNavigation(startDestination: String = "splash") {
     ) {
         composable("splash") {
             SplashScreen(onGetStarted = {
-                navController.navigate("onboarding") {
+                navController.navigate("guide") {
                     popUpTo("splash") { inclusive = true }
+                }
+            })
+        }
+        composable("guide") {
+            GuideScreen(onFinished = {
+                navController.navigate("onboarding") {
+                    popUpTo("guide") { inclusive = true }
                 }
             })
         }
@@ -126,6 +1017,22 @@ fun AppNavigation(startDestination: String = "splash") {
             BinScreen(onBack = {
                 navController.navigate("home") {
                     popUpTo("bin") { inclusive = true }
+                }
+            })
+        }
+        composable("splash") {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            SplashScreen(onGetStarted = {
+                // check if guide already shown
+                val guideShown = OnboardingGuide.isShown(context)
+                if (guideShown) {
+                    navController.navigate("onboarding") {
+                        popUpTo("splash") { inclusive = true }
+                    }
+                } else {
+                    navController.navigate("guide") {
+                        popUpTo("splash") { inclusive = true }
+                    }
                 }
             })
         }
@@ -231,7 +1138,7 @@ loop();
 @Composable
 fun SplashScreen(onGetStarted: () -> Unit) {
     LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(2800L)
+        kotlinx.coroutines.delay(1500L)
         onGetStarted()
     }
 
@@ -577,22 +1484,44 @@ fun HomeScreen(
             .background(Color(0xFFF8FAF8))
     ) {
         // ── HEADER ───────────────────────────────────
-        Column(
+        var showSettings by remember { mutableStateOf(false) }
+
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, top = 48.dp, bottom = 8.dp)
+                .padding(start = 20.dp, end = 20.dp, top = 48.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "SpaceMint",
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = MintGreen
-            )
-            Text(
-                text = "Your daily space cleaner",
-                fontSize = 14.sp,
-                color = Color(0xFF777777)
-            )
+            Column {
+                Text(
+                    text = "SpaceMint",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MintGreen
+                )
+                Text(
+                    text = "Your daily space cleaner",
+                    fontSize = 14.sp,
+                    color = Color(0xFF777777)
+                )
+            }
+            // gear icon
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(Color.White, RoundedCornerShape(12.dp))
+                    .border(0.5.dp, Color(0xFFE0E0E0), RoundedCornerShape(12.dp))
+                    .clickable { showSettings = true },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = "⚙", fontSize = 20.sp)
+            }
+        }
+
+// settings bottom sheet
+        if (showSettings) {
+            SettingsScreen(onDismiss = { showSettings = false })
         }
 
         // ── STORAGE CARD ──────────────────────────────
@@ -657,55 +1586,64 @@ fun HomeScreen(
         }
 
         // ── SESSION CARD ──────────────────────────────
+        // ── SESSION CARD ──────────────────────────────
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 8.dp),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = MintGreen),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Column {
-                    Text(
-                        text = "Session ready",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "5 files · under 60 seconds",
-                        fontSize = 13.sp,
-                        color = Color.White.copy(alpha = 0.75f)
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Button(
-                        onClick = onStartReview,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color.White,
-                            contentColor   = MintGreen
-                        ),
-                        contentPadding = PaddingValues(
-                            horizontal = 20.dp,
-                            vertical   = 10.dp
-                        )
-                    ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
                         Text(
-                            text = "Start reviewing →",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
+                            text = "Ready to clean",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "5 files waiting — takes 60 seconds",
+                            fontSize = 13.sp,
+                            color = Color.White.copy(alpha = 0.8f)
                         )
                     }
+                    Text(text = "🌿", fontSize = 36.sp)
                 }
-                Text(text = "🌿", fontSize = 48.sp)
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // BIG PROMINENT BUTTON
+                Button(
+                    onClick = onStartReview,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White,
+                        contentColor   = MintGreen
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(4.dp)
+                ) {
+                    Text(
+                        text = "Start Reviewing  →",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
 
@@ -741,22 +1679,26 @@ fun HomeScreen(
         FactCard()
 
         // ── BIN BUTTON ────────────────────────────────
-        Spacer(modifier = Modifier.height(8.dp))
-        Button(
-            onClick = onViewBin,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFFFFEDED),
-                contentColor   = Color(0xFFA32D2D)
-            )
-        ) {
-            Text(
-                text = "🗑 View bin (${BinManager.count()} items)",
-                fontSize = 14.sp
-            )
+        // ── BIN BUTTON — only show when bin has items ──
+        if (BinManager.count() > 0) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = onViewBin,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFFFEDED),
+                    contentColor   = Color(0xFFA32D2D)
+                )
+            ) {
+                Text(
+                    text = "Recycle bin — ${BinManager.count()} items waiting",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
         // ── DAILY TARGET BAR ─────────────────────────
         var targetMB by remember {
@@ -862,6 +1804,345 @@ fun HomeScreen(
         Spacer(modifier = Modifier.height(16.dp))
     }
 }
+@Composable
+fun SettingsScreen(onDismiss: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // morning and evening times
+    var morningHour by remember {
+        mutableStateOf(NotificationScheduler.getMorningTime(context).first)
+    }
+    var eveningHour by remember {
+        mutableStateOf(NotificationScheduler.getEveningTime(context).first)
+    }
+    var targetMB by remember {
+        mutableStateOf(TargetManager.getCurrentTarget(context))
+    }
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.85f),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAF8)),
+            elevation = CardDefaults.cardElevation(0.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                // ── HEADER ────────────────────────────
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Settings",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1A1A1A)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .background(Color(0xFFEEEEEE), RoundedCornerShape(99.dp))
+                            .clickable { onDismiss() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = "✕", fontSize = 14.sp, color = Color(0xFF777777))
+                    }
+                }
+
+                // ── NOTIFICATIONS ─────────────────────
+                SettingsSection(title = "Notifications") {
+                    // morning time
+                    SettingsRow(
+                        title = "Morning reminder",
+                        subtitle = "Currently $morningHour:00 AM"
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(9, 10, 11, 12).forEach { hour ->
+                                Box(
+                                    modifier = Modifier
+                                        .background(
+                                            if (morningHour == hour) MintGreen
+                                            else Color(0xFFEEEEEE),
+                                            RoundedCornerShape(8.dp)
+                                        )
+                                        .clickable {
+                                            morningHour = hour
+                                            NotificationScheduler.setMorningTime(context, hour, 0)
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = "${hour}AM",
+                                        fontSize = 12.sp,
+                                        color = if (morningHour == hour)
+                                            Color.White else Color(0xFF555555),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // evening time
+                    SettingsRow(
+                        title = "Evening reminder",
+                        subtitle = "Currently $eveningHour:00 PM"
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(17, 18, 19, 20).forEach { hour ->
+                                val label = "${hour - 12}PM"
+                                Box(
+                                    modifier = Modifier
+                                        .background(
+                                            if (eveningHour == hour) MintGreen
+                                            else Color(0xFFEEEEEE),
+                                            RoundedCornerShape(8.dp)
+                                        )
+                                        .clickable {
+                                            eveningHour = hour
+                                            NotificationScheduler.setEveningTime(
+                                                context, hour, 0
+                                            )
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontSize = 12.sp,
+                                        color = if (eveningHour == hour)
+                                            Color.White else Color(0xFF555555),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── DAILY TARGET ──────────────────────
+                SettingsSection(title = "Daily Clean Target") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Target per session",
+                            fontSize = 14.sp,
+                            color = Color(0xFF1A1A1A)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .background(MintGreen, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "~${targetMB.toInt()} MB",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Slider(
+                        value = targetMB,
+                        onValueChange = {
+                            targetMB = it
+                            TargetManager.setUserTarget(context, it)
+                        },
+                        valueRange = 10f..100f,
+                        steps = 8,
+                        colors = SliderDefaults.colors(
+                            thumbColor         = MintGreen,
+                            activeTrackColor   = MintGreen,
+                            inactiveTrackColor = Color(0xFFE0E0E0)
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "10 MB", fontSize = 10.sp, color = Color(0xFFAAAAAA))
+                        Text(text = "100 MB", fontSize = 10.sp, color = Color(0xFFAAAAAA))
+                    }
+                }
+
+                // ── SHARE APP ─────────────────────────
+                SettingsSection(title = "Share") {
+                    Button(
+                        onClick = {
+                            val intent = android.content.Intent(
+                                android.content.Intent.ACTION_SEND
+                            ).apply {
+                                type = "text/plain"
+                                putExtra(
+                                    android.content.Intent.EXTRA_TEXT,
+                                    "I have been using SpaceMint to slowly clean my phone storage — 5 files a day. Really useful app. Check it out on Play Store — search SpaceMint."
+                                )
+                            }
+                            context.startActivity(
+                                android.content.Intent.createChooser(intent, "Share SpaceMint")
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFE8F7F1),
+                            contentColor   = MintGreen
+                        ),
+                        elevation = ButtonDefaults.buttonElevation(0.dp)
+                    ) {
+                        Text(
+                            text = "Share SpaceMint with friends",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                // ── PRIVACY POLICY ────────────────────
+                SettingsSection(title = "Legal") {
+                    TextButton(
+                        onClick = {
+                            val intent = android.content.Intent(
+                                android.content.Intent.ACTION_VIEW,
+                                android.net.Uri.parse(
+                                    "https://bafflingraman.github.io/SpaceMint/privacy_policy"
+                                )
+                            )
+                            context.startActivity(intent)
+                        }
+                    ) {
+                        Text(
+                            text = "Privacy Policy",
+                            fontSize = 14.sp,
+                            color = MintGreen,
+                            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline
+                        )
+                    }
+                }
+
+                // ── ABOUT ─────────────────────────────
+                SettingsSection(title = "About") {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "SpaceMint",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MintGreen
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Version 1.0",
+                            fontSize = 13.sp,
+                            color = Color(0xFF999999)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Made by Raman",
+                            fontSize = 13.sp,
+                            color = Color(0xFF777777)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "devoted to mankind",
+                            fontSize = 11.sp,
+                            color = Color(0xFFAAAAAA),
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                            letterSpacing = 1.5.sp
+                        )
+                        Text(
+                            text = "credited to a stranger",
+                            fontSize = 10.sp,
+                            color = Color(0xFFCCCCCC),
+                            letterSpacing = 1.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+    }
+}
+
+// ── SETTINGS HELPER COMPOSABLES ───────────────────────────────
+@Composable
+fun SettingsSection(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+    ) {
+        Text(
+            text = title.uppercase(),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFFAAAAAA),
+            letterSpacing = 1.sp,
+            modifier = Modifier.padding(bottom = 10.dp)
+        )
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(0.dp),
+            border = androidx.compose.foundation.BorderStroke(
+                0.5.dp, Color(0xFFE8E8E8)
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsRow(
+    title: String,
+    subtitle: String,
+    content: @Composable () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = title,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF1A1A1A)
+        )
+        Text(
+            text = subtitle,
+            fontSize = 12.sp,
+            color = Color(0xFF999999),
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        content()
+    }
+}
 
 // ── REUSABLE STAT CARD ────────────────────────────────────────
 @Composable
@@ -894,7 +2175,199 @@ fun StatCard(
 // ── SCREEN 4: REVIEW ──────────────────────────────────────────
 @Composable
 fun ReviewScreen(onFinished: () -> Unit) {
+    var currentIndex by remember { mutableStateOf(0) }
+    var deletedCount by remember { mutableStateOf(0) }
+    var showUndo by remember { mutableStateOf(false) }
+    var lastDeletedFile by remember { mutableStateOf<ReviewFile?>(null) }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    var hasFullAccess by remember { mutableStateOf(true) }
+    var showAccessDialog by remember { mutableStateOf(false) }
+
+    // check full access every time review screen opens
+    LaunchedEffect(Unit) {
+        val hasImages = androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.READ_MEDIA_IMAGES
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        val hasVideos = androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.READ_MEDIA_VIDEO
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        if (!hasImages || !hasVideos) {
+            hasFullAccess = false
+            showAccessDialog = true
+        }
+    }
+
+    // ── FULL ACCESS DIALOG ────────────────────────────────────
+    if (showAccessDialog) {
+        AlertDialog(
+            onDismissRequest = { },  // cannot dismiss — must take action
+            title = {
+                Text(
+                    text = "Full access required",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "You have given SpaceMint limited access. This means only a few photos are visible and the same files will repeat.\n\nTo review your full gallery and actually free storage, please allow full access.\n\nTap Open Settings → Permissions → Photos and Videos → Allow all.",
+                    color = Color(0xFF777777),
+                    lineHeight = 22.sp,
+                    fontSize = 13.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showAccessDialog = false
+                        // open app settings directly
+                        val intent = android.content.Intent(
+                            android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                        ).apply {
+                            data = android.net.Uri.fromParts(
+                                "package", context.packageName, null
+                            )
+                        }
+                        context.startActivity(intent)
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MintGreen,
+                        contentColor   = Color.White
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = "Open Settings",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showAccessDialog = false
+                        onFinished() // go back
+                    }
+                ) {
+                    Text(
+                        text = "Maybe later",
+                        color = Color(0xFF999999)
+                    )
+                }
+            }
+        )
+        // ── UNDO BAR ──────────────────────────────
+        if (showUndo) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .background(
+                        Color(0xFF1A1A1A),
+                        RoundedCornerShape(12.dp)
+                    )
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Added to bin",
+                        fontSize = 13.sp,
+                        color = Color.White
+                    )
+                    TextButton(
+                        onClick = {
+                            lastDeletedFile?.let {
+                                BinManager.restore(BinManager.items.lastOrNull() ?: return@TextButton)
+                                if (deletedCount > 0) deletedCount--
+                                if (currentIndex > 0) currentIndex--
+                                showUndo = false
+                                lastDeletedFile = null
+                            }
+                        }
+                    ) {
+                        Text(
+                            text = "Undo",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MintGreen
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // if no full access — show warning screen instead of review
+    if (!hasFullAccess) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFFF8FAF8))
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "Limited access detected",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1A1A1A),
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "SpaceMint can only see a few photos right now. The same files will keep repeating and very little storage will be freed.\n\nAllow full access so SpaceMint can review your entire gallery.",
+                fontSize = 14.sp,
+                color = Color(0xFF777777),
+                textAlign = TextAlign.Center,
+                lineHeight = 22.sp
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+            Button(
+                onClick = {
+                    showAccessDialog = true
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MintGreen,
+                    contentColor   = Color.White
+                )
+            ) {
+                Text(
+                    text = "Allow full access",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            TextButton(onClick = onFinished) {
+                Text(
+                    text = "Go back",
+                    color = Color(0xFF999999)
+                )
+            }
+        }
+        return
+    }
+
+
+    // ── REST OF REVIEWSCREEN CONTINUES BELOW ──────────────────
+    // ... your existing ReviewScreen code from here
+
 
     val files = remember {
         QueueManager.getNextBatch(context, batchSize = 5).ifEmpty {
@@ -906,8 +2379,7 @@ fun ReviewScreen(onFinished: () -> Unit) {
         }
     }
 
-    var currentIndex by remember { mutableStateOf(0) }
-    var deletedCount by remember { mutableStateOf(0) }
+
     var freedMB      by remember { mutableStateOf(0.0) }
 
     if (currentIndex >= files.size) {
@@ -1174,8 +2646,10 @@ fun ReviewScreen(onFinished: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // DELETE
+            // DELETE
             Button(
                 onClick = {
+                    lastDeletedFile = file
                     BinManager.addToBin(file)
                     deletedCount++
                     val num = file.size
@@ -1189,7 +2663,14 @@ fun ReviewScreen(onFinished: () -> Unit) {
                         else                     -> num
                     }
                     currentIndex++
+                    showUndo = true
+                    scope.launch {
+                        kotlinx.coroutines.delay(3000L)
+                        showUndo = false
+                        lastDeletedFile = null
+                    }
                 },
+
                 modifier = Modifier
                     .weight(1f)
                     .height(100.dp),
@@ -1244,7 +2725,7 @@ fun ReviewScreen(onFinished: () -> Unit) {
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "skip for now",
+                        text = "Keep it",
                         fontSize = 11.sp,
                         color = Color(0xFF0F6E56).copy(alpha = 0.6f)
                     )
@@ -1254,56 +2735,8 @@ fun ReviewScreen(onFinished: () -> Unit) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // ── AD BANNER — bottom of screen ──────────────
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 16.dp)
-                .height(60.dp)
-                .background(
-                    Color(0xFFF0F0F0),
-                    RoundedCornerShape(12.dp)
-                )
-                .border(
-                    width = 1.dp,
-                    color = Color(0xFFE0E0E0),
-                    shape = RoundedCornerShape(12.dp)
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "Advertisement",
-                fontSize = 11.sp,
-                color = Color(0xFFCCCCCC)
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
 
-        // ── AD BANNER — bottom of screen ──────────────
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 16.dp)
-                .height(60.dp)
-                .background(
-                    Color(0xFFF0F0F0),
-                    RoundedCornerShape(12.dp)
-                )
-                .border(
-                    width = 1.dp,
-                    color = Color(0xFFE0E0E0),
-                    shape = RoundedCornerShape(12.dp)
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "Advertisement",
-                fontSize = 11.sp,
-                color = Color(0xFFCCCCCC)
-            )
-        }
+
     }
 }
 
@@ -1319,7 +2752,6 @@ fun ReviewDoneScreen(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
 
-    // record session stats + mark complete
     LaunchedEffect(Unit) {
         val freedBytes = (freedMB * 1_000_000).toLong()
         StorageHelper.recordSession(context, deletedCount, freedBytes)
@@ -1335,97 +2767,132 @@ fun ReviewDoneScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text(text = "🎉", fontSize = 64.sp)
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text(
-            text = "Session complete!",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF1A1A1A)
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "Your phone has a little more room now.",
-            fontSize = 14.sp,
-            color = Color(0xFF777777),
-            textAlign = TextAlign.Center,
-            lineHeight = 22.sp
-        )
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // stats row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            StatCard(
-                number   = "$deletedCount",
-                label    = "deleted this session",
-                modifier = Modifier.weight(1f)
-            )
-            StatCard(
-                number      = "%.1f MB".format(freedMB),
-                label       = "space freed",
-                modifier    = Modifier.weight(1f),
-                numberColor = MintGreen
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // all time stats
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            StatCard(
-                number   = "${StorageHelper.getTotalDeleted(context)}",
-                label    = "total deleted",
-                modifier = Modifier.weight(1f)
-            )
-            StatCard(
-                number      = "🔥 ${StorageHelper.getStreak(context)}",
-                label       = "day streak",
-                modifier    = Modifier.weight(1f),
-                numberColor = MintGreen
-            )
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // go to bin button
-        Button(
-            onClick = onGoHome,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (deletedCount > 0) Color(0xFFE24B4A) else MintGreen,
-                contentColor   = Color.White
-            )
-        ) {
+        if (deletedCount == 0) {
+            // ── ALL KEPT — no deletions ───────────────
+            Text(text = "👍", fontSize = 64.sp)
+            Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = if (deletedCount > 0)
-                    "🗑 Review ${deletedCount} deleted files"
-                else
-                    "Back to home",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
+                text = "All files kept!",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1A1A1A)
             )
-        }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "You reviewed 5 files and decided to keep them all. That is perfectly fine — SpaceMint will show you new ones tomorrow.",
+                fontSize = 14.sp,
+                color = Color(0xFF777777),
+                textAlign = TextAlign.Center,
+                lineHeight = 22.sp
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+            Button(
+                onClick = {
+                    BinManager.isComingFromReview = false
+                    onGoHome()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MintGreen,
+                    contentColor   = Color.White
+                )
+            ) {
+                Text(
+                    text = "Back to home",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        } else {
+            // ── FILES DELETED — celebration ───────────
+            Text(text = "🎉", fontSize = 64.sp)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Session complete!",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1A1A1A)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Your phone has a little more room now.",
+                fontSize = 14.sp,
+                color = Color(0xFF777777),
+                textAlign = TextAlign.Center,
+                lineHeight = 22.sp
+            )
+            Spacer(modifier = Modifier.height(32.dp))
 
-        // skip bin — go home directly
-        if (deletedCount > 0) {
+            // session stats
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                StatCard(
+                    number   = "$deletedCount",
+                    label    = "deleted this session",
+                    modifier = Modifier.weight(1f)
+                )
+                StatCard(
+                    number      = "%.1f MB".format(freedMB),
+                    label       = "space freed",
+                    modifier    = Modifier.weight(1f),
+                    numberColor = MintGreen
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // all time stats
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                StatCard(
+                    number   = "${StorageHelper.getTotalDeleted(context)}",
+                    label    = "total deleted",
+                    modifier = Modifier.weight(1f)
+                )
+                StatCard(
+                    number      = "🔥 ${StorageHelper.getStreak(context)}",
+                    label       = "day streak",
+                    modifier    = Modifier.weight(1f),
+                    numberColor = MintGreen
+                )
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Button(
+                onClick = {
+                    BinManager.isComingFromReview = true
+                    onGoHome()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFE24B4A),
+                    contentColor   = Color.White
+                )
+            ) {
+                Text(
+                    text = "Review ${deletedCount} deleted files",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
             TextButton(onClick = {
-                // skip bin — mark as going home
+                BinManager.isComingFromReview = false
                 onGoHome()
             }) {
                 Text(
@@ -1493,25 +2960,70 @@ fun BinScreen(onBack: () -> Unit) {
                         binItems.take(4).forEach { item ->
                             Box(
                                 modifier = Modifier
-                                    .size(56.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFFF0FBF6)),
+                                    .size(64.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFF1A1A1A)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (item.uri != null) {
-                                    coil.compose.AsyncImage(
-                                        model = item.uri,
-                                        contentDescription = item.name,
-                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
+                                    if (item.type == "Video") {
+                                        // extract real video frame
+                                        val thumbnail = remember(item.uri) {
+                                            try {
+                                                val retriever = android.media.MediaMetadataRetriever()
+                                                retriever.setDataSource(context, item.uri)
+                                                val bitmap = retriever.getFrameAtTime(
+                                                    1_000_000,
+                                                    android.media.MediaMetadataRetriever
+                                                        .OPTION_CLOSEST_SYNC
+                                                )
+                                                retriever.release()
+                                                bitmap
+                                            } catch (e: Exception) { null }
+                                        }
+                                        if (thumbnail != null) {
+                                            androidx.compose.foundation.Image(
+                                                bitmap = thumbnail.asImageBitmap(),
+                                                contentDescription = item.name,
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        } else {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .background(Color(0xFF2A2A2A)),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(text = "Video", fontSize = 8.sp, color = Color.White)
+                                            }
+                                        }
+                                        // play icon overlay
+                                        Box(
+                                            modifier = Modifier
+                                                .size(22.dp)
+                                                .background(
+                                                    Color.Black.copy(alpha = 0.6f),
+                                                    RoundedCornerShape(99.dp)
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(text = "▶", fontSize = 8.sp, color = Color.White)
+                                        }
+                                    } else {
+                                        // photo
+                                        coil.compose.AsyncImage(
+                                            model = item.uri,
+                                            contentDescription = item.name,
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
                                 } else {
                                     Text(
-                                        text = when(item.type) {
-                                            "Video" -> "🎥"
-                                            else    -> "📸"
-                                        },
-                                        fontSize = 20.sp
+                                        text = if (item.type == "Video") "Video" else "Photo",
+                                        fontSize = 8.sp,
+                                        color = Color.White
                                     )
                                 }
                             }
@@ -1720,7 +3232,6 @@ fun BinScreen(onBack: () -> Unit) {
     }
 }
 
-// ── BIN ITEM CARD ─────────────────────────────────────────────
 @Composable
 fun BinItemCard(
     item: BinItem,
@@ -1730,8 +3241,10 @@ fun BinItemCard(
     val context = androidx.compose.ui.platform.LocalContext.current
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = androidx.compose.foundation.BorderStroke(
@@ -1743,13 +3256,13 @@ fun BinItemCard(
                 .fillMaxWidth()
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // thumbnail — CLICKABLE to open file
+            // ── THUMBNAIL — tap to open ───────────────
             Box(
                 modifier = Modifier
-                    .size(52.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(12.dp))
                     .background(Color(0xFFF0FBF6))
                     .clickable {
                         item.uri?.let { uri ->
@@ -1764,36 +3277,66 @@ fun BinItemCard(
                                     android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
                                 )
                             }
-                            try {
-                                context.startActivity(intent)
-                            } catch (e: Exception) {
-                                Log.e("BinItemCard", "Error opening file: ${e.message}")
-                            }
+                            context.startActivity(intent)
                         }
                     },
                 contentAlignment = Alignment.Center
             ) {
                 if (item.uri != null) {
-                    coil.compose.AsyncImage(
-                        model = item.uri,
-                        contentDescription = item.name,
-                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    if (item.type == "Video") {
+                        val thumbnail = remember(item.uri) {
+                            try {
+                                val retriever = android.media.MediaMetadataRetriever()
+                                retriever.setDataSource(context, item.uri)
+                                val bitmap = retriever.getFrameAtTime(
+                                    1_000_000,
+                                    android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+                                )
+                                retriever.release()
+                                bitmap
+                            } catch (e: Exception) { null }
+                        }
+                        if (thumbnail != null) {
+                            androidx.compose.foundation.Image(
+                                bitmap = thumbnail.asImageBitmap(),
+                                contentDescription = item.name,
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Text(text = "Video", fontSize = 10.sp, color = Color(0xFF777777))
+                        }
+                        // play icon
+                        Box(
+                            modifier = Modifier
+                                .size(22.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(99.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(text = "▶", fontSize = 8.sp, color = Color.White)
+                        }
+                    } else {
+                        coil.compose.AsyncImage(
+                            model = item.uri,
+                            contentDescription = item.name,
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 } else {
                     Text(
                         text = when(item.type) {
-                            "Video"      -> "🎥"
-                            "PDF"        -> "📄"
-                            "Screenshot" -> "📋"
-                            else         -> "📸"
+                            "Video" -> "Vid"
+                            "PDF"   -> "PDF"
+                            else    -> "Img"
                         },
-                        fontSize = 22.sp
+                        fontSize = 10.sp,
+                        color = Color(0xFF777777)
                     )
                 }
             }
 
-            // file info
+            // ── FILE INFO ─────────────────────────────
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = item.name,
@@ -1803,73 +3346,69 @@ fun BinItemCard(
                     maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
+                Spacer(modifier = Modifier.height(3.dp))
                 Text(
-                    text = "Deleted ${item.deletedDate} · ${item.size}",
-                    fontSize = 11.sp,
-                    color = Color(0xFF999999),
-                    modifier = Modifier.padding(top = 2.dp)
+                    text = item.size,
+                    fontSize = 12.sp,
+                    color = Color(0xFFA32D2D),
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Tap photo to view",
+                    fontSize = 10.sp,
+                    color = Color(0xFFAAAAAA)
                 )
             }
 
-            // view/open button
-            Button(
-                onClick = {
-                    item.uri?.let { uri ->
-                        val intent = android.content.Intent(
-                            android.content.Intent.ACTION_VIEW
-                        ).apply {
-                            setDataAndType(
-                                uri,
-                                if (item.type == "Video") "video/*" else "image/*"
-                            )
-                            addFlags(
-                                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-                            )
-                        }
-                        try {
-                            context.startActivity(intent)
-                        } catch (e: Exception) {
-                            Log.e("BinItemCard", "Error opening file: ${e.message}")
-                        }
-                    }
-                },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFE6F1FB),
-                    contentColor   = Color(0xFF185FA5)
-                ),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-                elevation = ButtonDefaults.buttonElevation(0.dp)
+            // ── BUTTONS — vertical stack ──────────────
+            Column(
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalAlignment = Alignment.End
             ) {
-                Text(text = "👁 View", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            }
+                // Restore button
+                Button(
+                    onClick = onRestore,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFE8F7F1),
+                        contentColor   = MintGreen
+                    ),
+                    contentPadding = PaddingValues(
+                        horizontal = 12.dp,
+                        vertical   = 8.dp
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(0.dp),
+                    modifier = Modifier.height(34.dp)
+                ) {
+                    Text(
+                        text = "Restore",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
 
-            // restore button
-            Button(
-                onClick = onRestore,
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFE8F7F1),
-                    contentColor   = MintGreen
-                ),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-                elevation = ButtonDefaults.buttonElevation(0.dp)
-            ) {
-                Text(text = "↻", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            }
-
-            // delete now button
-            Button(
-                onClick = onDeleteNow,
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFFFEDED),
-                    contentColor   = Color(0xFFA32D2D)
-                ),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-                elevation = ButtonDefaults.buttonElevation(0.dp)
-            ) {
-                Text(text = "🗑", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                // Delete button
+                Button(
+                    onClick = onDeleteNow,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFFEDED),
+                        contentColor   = Color(0xFFA32D2D)
+                    ),
+                    contentPadding = PaddingValues(
+                        horizontal = 12.dp,
+                        vertical   = 8.dp
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(0.dp),
+                    modifier = Modifier.height(34.dp)
+                ) {
+                    Text(
+                        text = "Delete",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }

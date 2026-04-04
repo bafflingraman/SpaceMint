@@ -18,6 +18,7 @@ data class BinItem(
 )
 
 object BinManager {
+    var isComingFromReview = false
 
     private val _items = mutableListOf<BinItem>()
     val items: List<BinItem> get() = _items.toList()
