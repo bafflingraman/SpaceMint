@@ -130,7 +130,7 @@ will be posted here with a new date at the top.
 
 If you have a genuine question about how this app handles your data, 
 you can reach out through the GitHub repository:
-
+ramansinghrajput0405@gmail.com
 github.com/bafflingraman/SpaceMint
 
 ---
