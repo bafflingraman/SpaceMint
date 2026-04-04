@@ -39,14 +39,21 @@ import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.asImageBitmap
 
 val MintGreen = Color(0xFF1D9E75)
 val MintDark  = Color(0xFF0F6E56)
 
 class MainActivity : ComponentActivity() {
 
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.setFlags(
+            android.view.WindowManager.LayoutParams.FLAG_SECURE,
+            android.view.WindowManager.LayoutParams.FLAG_SECURE
+        )
         enableEdgeToEdge()
         scheduleNotifications()
         setContent {
@@ -65,7 +72,9 @@ class MainActivity : ComponentActivity() {
                 AppNavigation(startDestination = "review")
             }
         }
+
     }
+
 
     private fun scheduleNotifications() {
         NotificationHelper.createChannel(this)
@@ -982,7 +991,7 @@ fun ReviewScreen(onFinished: () -> Unit) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(220.dp)
-                        .background(Color(0xFFF0FBF6))
+                        .background(Color(0xFF1A1A1A))
                         .clickable {
                             file.uri?.let { uri ->
                                 val intent = android.content.Intent(
@@ -1002,34 +1011,66 @@ fun ReviewScreen(onFinished: () -> Unit) {
                     contentAlignment = Alignment.Center
                 ) {
                     if (file.uri != null) {
-
-                        coil.compose.AsyncImage(
-                            model = coil.request.ImageRequest.Builder(context)
-                                .data(file.uri)
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = file.name,
-                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-
-                        // video play button overlay
                         if (file.type == "Video") {
+                            // ── REAL VIDEO THUMBNAIL ──────────────────
+                            val thumbnail = remember(file.uri) {
+                                try {
+                                    val retriever = android.media.MediaMetadataRetriever()
+                                    retriever.setDataSource(context, file.uri)
+                                    val bitmap = retriever.getFrameAtTime(
+                                        1_000_000, // get frame at 1 second
+                                        android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+                                    )
+                                    retriever.release()
+                                    bitmap
+                                } catch (e: Exception) {
+                                    null
+                                }
+                            }
+
+                            if (thumbnail != null) {
+                                androidx.compose.foundation.Image(
+                                    bitmap = thumbnail.asImageBitmap(),
+                                    contentDescription = file.name,
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                // fallback if frame extraction fails
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color(0xFF1A1A2A)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(text = "🎥", fontSize = 52.sp)
+                                }
+                            }
+
+                            // play button overlay
                             Box(
                                 modifier = Modifier
-                                    .size(60.dp)
+                                    .size(64.dp)
                                     .background(
-                                        Color.Black.copy(alpha = 0.5f),
+                                        Color.Black.copy(alpha = 0.6f),
                                         RoundedCornerShape(99.dp)
                                     ),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = "▶",
-                                    fontSize = 24.sp,
-                                    color = Color.White
-                                )
+                                Text(text = "▶", fontSize = 26.sp, color = Color.White)
                             }
+
+                        } else {
+                            // ── PHOTO THUMBNAIL ───────────────────────
+                            coil.compose.AsyncImage(
+                                model = coil.request.ImageRequest.Builder(context)
+                                    .data(file.uri)
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = file.name,
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
                         }
 
                         // tap to view label
@@ -1121,16 +1162,17 @@ fun ReviewScreen(onFinished: () -> Unit) {
             )
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+
+
+        Spacer(modifier = Modifier.height(12.dp))
 
         // ── DELETE / KEEP BUTTONS ─────────────────────
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 20.dp),
+                .padding(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-
             // DELETE
             Button(
                 onClick = {
@@ -1150,19 +1192,29 @@ fun ReviewScreen(onFinished: () -> Unit) {
                 },
                 modifier = Modifier
                     .weight(1f)
-                    .height(72.dp),
-                shape = RoundedCornerShape(18.dp),
+                    .height(100.dp),
+                shape = RoundedCornerShape(20.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFFFFEDED),
                     contentColor   = Color(0xFFA32D2D)
-                )
+                ),
+                elevation = ButtonDefaults.buttonElevation(0.dp)
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = "🗑", fontSize = 20.sp)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(text = "🗑", fontSize = 28.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Delete",
-                        fontSize = 14.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = file.size,
+                        fontSize = 11.sp,
+                        color = Color(0xFFCC4444)
                     )
                 }
             }
@@ -1172,22 +1224,85 @@ fun ReviewScreen(onFinished: () -> Unit) {
                 onClick = { currentIndex++ },
                 modifier = Modifier
                     .weight(1f)
-                    .height(72.dp),
-                shape = RoundedCornerShape(18.dp),
+                    .height(100.dp),
+                shape = RoundedCornerShape(20.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFFE8F7F1),
                     contentColor   = Color(0xFF0F6E56)
-                )
+                ),
+                elevation = ButtonDefaults.buttonElevation(0.dp)
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(text = "✓", fontSize = 20.sp)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(text = "✓", fontSize = 28.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Keep",
-                        fontSize = 14.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "skip for now",
+                        fontSize = 11.sp,
+                        color = Color(0xFF0F6E56).copy(alpha = 0.6f)
                     )
                 }
             }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ── AD BANNER — bottom of screen ──────────────
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 16.dp)
+                .height(60.dp)
+                .background(
+                    Color(0xFFF0F0F0),
+                    RoundedCornerShape(12.dp)
+                )
+                .border(
+                    width = 1.dp,
+                    color = Color(0xFFE0E0E0),
+                    shape = RoundedCornerShape(12.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "Advertisement",
+                fontSize = 11.sp,
+                color = Color(0xFFCCCCCC)
+            )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ── AD BANNER — bottom of screen ──────────────
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 16.dp)
+                .height(60.dp)
+                .background(
+                    Color(0xFFF0F0F0),
+                    RoundedCornerShape(12.dp)
+                )
+                .border(
+                    width = 1.dp,
+                    color = Color(0xFFE0E0E0),
+                    shape = RoundedCornerShape(12.dp)
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "Advertisement",
+                fontSize = 11.sp,
+                color = Color(0xFFCCCCCC)
+            )
         }
     }
 }
@@ -1496,7 +1611,7 @@ fun BinScreen(onBack: () -> Unit) {
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF1A1A1A)
             )
-            Spacer(modifier = Modifier.weight(1f))
+
 
             if (binItems.isNotEmpty()) {
                 TextButton(onClick = { showDialog = true }) {
@@ -1612,6 +1727,8 @@ fun BinItemCard(
     onRestore: () -> Unit,
     onDeleteNow: () -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -1628,12 +1745,32 @@ fun BinItemCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // thumbnail
+            // thumbnail — CLICKABLE to open file
             Box(
                 modifier = Modifier
                     .size(52.dp)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFFF0FBF6)),
+                    .background(Color(0xFFF0FBF6))
+                    .clickable {
+                        item.uri?.let { uri ->
+                            val intent = android.content.Intent(
+                                android.content.Intent.ACTION_VIEW
+                            ).apply {
+                                setDataAndType(
+                                    uri,
+                                    if (item.type == "Video") "video/*" else "image/*"
+                                )
+                                addFlags(
+                                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                )
+                            }
+                            try {
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                Log.e("BinItemCard", "Error opening file: ${e.message}")
+                            }
+                        }
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 if (item.uri != null) {
@@ -1674,6 +1811,39 @@ fun BinItemCard(
                 )
             }
 
+            // view/open button
+            Button(
+                onClick = {
+                    item.uri?.let { uri ->
+                        val intent = android.content.Intent(
+                            android.content.Intent.ACTION_VIEW
+                        ).apply {
+                            setDataAndType(
+                                uri,
+                                if (item.type == "Video") "video/*" else "image/*"
+                            )
+                            addFlags(
+                                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            )
+                        }
+                        try {
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Log.e("BinItemCard", "Error opening file: ${e.message}")
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFE6F1FB),
+                    contentColor   = Color(0xFF185FA5)
+                ),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                elevation = ButtonDefaults.buttonElevation(0.dp)
+            ) {
+                Text(text = "👁 View", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+
             // restore button
             Button(
                 onClick = onRestore,
@@ -1682,10 +1852,10 @@ fun BinItemCard(
                     containerColor = Color(0xFFE8F7F1),
                     contentColor   = MintGreen
                 ),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                 elevation = ButtonDefaults.buttonElevation(0.dp)
             ) {
-                Text(text = "Restore", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(text = "↻", fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
 
             // delete now button
@@ -1696,10 +1866,10 @@ fun BinItemCard(
                     containerColor = Color(0xFFFFEDED),
                     contentColor   = Color(0xFFA32D2D)
                 ),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                 elevation = ButtonDefaults.buttonElevation(0.dp)
             ) {
-                Text(text = "Delete", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(text = "🗑", fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
