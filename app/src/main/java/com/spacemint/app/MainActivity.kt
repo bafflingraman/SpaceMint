@@ -58,6 +58,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.draw.alpha
+import androidx.compose.runtime.mutableStateMapOf
 
 
 val MintGreen = Color(0xFF1D9E75)
@@ -1486,6 +1491,11 @@ fun HomeScreen(
         // ── HEADER ───────────────────────────────────
         var showSettings by remember { mutableStateOf(false) }
 
+// ── SETTINGS DIALOG ───────────────────────────
+        if (showSettings) {
+            SettingsScreen(onDismiss = { showSettings = false })
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1520,9 +1530,7 @@ fun HomeScreen(
         }
 
 // settings bottom sheet
-        if (showSettings) {
-            SettingsScreen(onDismiss = { showSettings = false })
-        }
+
 
         // ── STORAGE CARD ──────────────────────────────
         Card(
@@ -1825,7 +1833,7 @@ fun SettingsScreen(onDismiss: () -> Unit) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.85f),
+                .fillMaxHeight(0.92f),
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAF8)),
             elevation = CardDefaults.cardElevation(0.dp)
@@ -1883,7 +1891,7 @@ fun SettingsScreen(onDismiss: () -> Unit) {
                                         .padding(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
                                     Text(
-                                        text = "${hour}AM",
+                                        text = if (hour == 12) "12PM" else "${hour}AM",
                                         fontSize = 12.sp,
                                         color = if (morningHour == hour)
                                             Color.White else Color(0xFF555555),
@@ -1979,6 +1987,47 @@ fun SettingsScreen(onDismiss: () -> Unit) {
                     ) {
                         Text(text = "10 MB", fontSize = 10.sp, color = Color(0xFFAAAAAA))
                         Text(text = "100 MB", fontSize = 10.sp, color = Color(0xFFAAAAAA))
+                    }
+                }// ── APP BEHAVIOUR ─────────────────────────────
+                SettingsSection(title = "App Behaviour") {
+                    var autoClose by remember {
+                        mutableStateOf(AppPrefs.getAutoClose(context))
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Close app after deleting",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1A1A1A)
+                            )
+                            Text(
+                                text = if (autoClose)
+                                    "App closes after permanent deletion"
+                                else
+                                    "App returns to home after deletion",
+                                fontSize = 12.sp,
+                                color = Color(0xFF999999),
+                                modifier = Modifier.padding(top = 2.dp, end = 8.dp)
+                            )
+                        }
+                        androidx.compose.material3.Switch(
+                            checked = autoClose,
+                            onCheckedChange = {
+                                autoClose = it
+                                AppPrefs.setAutoClose(context, it)
+                            },
+                            colors = androidx.compose.material3.SwitchDefaults.colors(
+                                checkedThumbColor   = Color.White,
+                                checkedTrackColor   = MintGreen,
+                                uncheckedThumbColor = Color.White,
+                                uncheckedTrackColor = Color(0xFFCCCCCC)
+                            )
+                        )
                     }
                 }
 
@@ -2084,6 +2133,19 @@ fun SettingsScreen(onDismiss: () -> Unit) {
             }
         }
     }
+
+}
+object AppPrefs {
+    private const val PREFS_NAME     = "spacemint_app_prefs"
+    private const val KEY_AUTO_CLOSE = "auto_close_after_delete"
+
+    fun getAutoClose(context: android.content.Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+            .getBoolean(KEY_AUTO_CLOSE, false)
+
+    fun setAutoClose(context: android.content.Context, value: Boolean) =
+        context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+            .edit().putBoolean(KEY_AUTO_CLOSE, value).apply()
 }
 
 // ── SETTINGS HELPER COMPOSABLES ───────────────────────────────
@@ -2173,29 +2235,37 @@ fun StatCard(
 }
 
 // ── SCREEN 4: REVIEW ──────────────────────────────────────────
+// ── FILE DECISION STATE ───────────────────────────────────────
+enum class FileDecision { UNDECIDED, DELETED, KEPT }
+
 @Composable
 fun ReviewScreen(onFinished: () -> Unit) {
     var currentIndex by remember { mutableStateOf(0) }
     var deletedCount by remember { mutableStateOf(0) }
     var showUndo by remember { mutableStateOf(false) }
     var lastDeletedFile by remember { mutableStateOf<ReviewFile?>(null) }
-
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
     var hasFullAccess by remember { mutableStateOf(true) }
     var showAccessDialog by remember { mutableStateOf(false) }
 
+    // track decision for each file
+    val decisions = remember { mutableStateMapOf<Int, FileDecision>() }
+
+    // handle phone back button
+    androidx.activity.compose.BackHandler(enabled = currentIndex > 0) {
+        currentIndex--
+    }
+
     // check full access every time review screen opens
     LaunchedEffect(Unit) {
         val hasImages = androidx.core.content.ContextCompat.checkSelfPermission(
             context, android.Manifest.permission.READ_MEDIA_IMAGES
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-
         val hasVideos = androidx.core.content.ContextCompat.checkSelfPermission(
             context, android.Manifest.permission.READ_MEDIA_VIDEO
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-
         if (!hasImages || !hasVideos) {
             hasFullAccess = false
             showAccessDialog = true
@@ -2205,12 +2275,9 @@ fun ReviewScreen(onFinished: () -> Unit) {
     // ── FULL ACCESS DIALOG ────────────────────────────────────
     if (showAccessDialog) {
         AlertDialog(
-            onDismissRequest = { },  // cannot dismiss — must take action
+            onDismissRequest = { },
             title = {
-                Text(
-                    text = "Full access required",
-                    fontWeight = FontWeight.Bold
-                )
+                Text(text = "Full access required", fontWeight = FontWeight.Bold)
             },
             text = {
                 Text(
@@ -2224,91 +2291,29 @@ fun ReviewScreen(onFinished: () -> Unit) {
                 Button(
                     onClick = {
                         showAccessDialog = false
-                        // open app settings directly
                         val intent = android.content.Intent(
                             android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS
                         ).apply {
-                            data = android.net.Uri.fromParts(
-                                "package", context.packageName, null
-                            )
+                            data = android.net.Uri.fromParts("package", context.packageName, null)
                         }
                         context.startActivity(intent)
                     },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MintGreen,
-                        contentColor   = Color.White
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MintGreen, contentColor = Color.White),
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text(
-                        text = "Open Settings",
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text(text = "Open Settings", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(
-                    onClick = {
-                        showAccessDialog = false
-                        onFinished() // go back
-                    }
-                ) {
-                    Text(
-                        text = "Maybe later",
-                        color = Color(0xFF999999)
-                    )
+                TextButton(onClick = { showAccessDialog = false; onFinished() }) {
+                    Text(text = "Maybe later", color = Color(0xFF999999))
                 }
             }
         )
-        // ── UNDO BAR ──────────────────────────────
-        if (showUndo) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 8.dp)
-                    .background(
-                        Color(0xFF1A1A1A),
-                        RoundedCornerShape(12.dp)
-                    )
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Added to bin",
-                        fontSize = 13.sp,
-                        color = Color.White
-                    )
-                    TextButton(
-                        onClick = {
-                            lastDeletedFile?.let {
-                                BinManager.restore(BinManager.items.lastOrNull() ?: return@TextButton)
-                                if (deletedCount > 0) deletedCount--
-                                if (currentIndex > 0) currentIndex--
-                                showUndo = false
-                                lastDeletedFile = null
-                            }
-                        }
-                    ) {
-                        Text(
-                            text = "Undo",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MintGreen
-                        )
-                    }
-                }
-            }
-        }
     }
 
-    // if no full access — show warning screen instead of review
+    // if no full access — show warning screen
     if (!hasFullAccess) {
         Column(
             modifier = Modifier
@@ -2318,80 +2323,37 @@ fun ReviewScreen(onFinished: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text(
-                text = "Limited access detected",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF1A1A1A),
-                textAlign = TextAlign.Center
-            )
+            Text(text = "Limited access detected", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A1A), textAlign = TextAlign.Center)
             Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = "SpaceMint can only see a few photos right now. The same files will keep repeating and very little storage will be freed.\n\nAllow full access so SpaceMint can review your entire gallery.",
-                fontSize = 14.sp,
-                color = Color(0xFF777777),
-                textAlign = TextAlign.Center,
-                lineHeight = 22.sp
-            )
+            Text(text = "SpaceMint can only see a few photos right now. Allow full access so SpaceMint can review your entire gallery.", fontSize = 14.sp, color = Color(0xFF777777), textAlign = TextAlign.Center, lineHeight = 22.sp)
             Spacer(modifier = Modifier.height(32.dp))
-            Button(
-                onClick = {
-                    showAccessDialog = true
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MintGreen,
-                    contentColor   = Color.White
-                )
-            ) {
-                Text(
-                    text = "Allow full access",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
+            Button(onClick = { showAccessDialog = true }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = MintGreen, contentColor = Color.White)) {
+                Text(text = "Allow full access", fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.height(12.dp))
             TextButton(onClick = onFinished) {
-                Text(
-                    text = "Go back",
-                    color = Color(0xFF999999)
-                )
+                Text(text = "Go back", color = Color(0xFF999999))
             }
         }
         return
     }
 
-
-    // ── REST OF REVIEWSCREEN CONTINUES BELOW ──────────────────
-    // ... your existing ReviewScreen code from here
-
-
     val files = remember {
         QueueManager.getNextBatch(context, batchSize = 5).ifEmpty {
-            listOf(ReviewFile(
-                name = "No files found",
-                date = "", size = "", type = "Photo",
-                hint = "Grant storage permission and reopen the app"
-            ))
+            listOf(ReviewFile(name = "No files found", date = "", size = "", type = "Photo", hint = "Grant storage permission and reopen the app"))
         }
     }
 
-
-    var freedMB      by remember { mutableStateOf(0.0) }
+    var freedMB by remember { mutableStateOf(0.0) }
 
     if (currentIndex >= files.size) {
-        ReviewDoneScreen(
-            deletedCount = deletedCount,
-            freedMB      = freedMB,
-            onGoHome     = onFinished
-        )
+        ReviewDoneScreen(deletedCount = deletedCount, freedMB = freedMB, onGoHome = onFinished)
         return
     }
 
     val file = files[currentIndex]
+    val currentDecision = decisions[currentIndex] ?: FileDecision.UNDECIDED
+    val isDeleted = currentDecision == FileDecision.DELETED
 
     Column(
         modifier = Modifier
@@ -2406,6 +2368,21 @@ fun ReviewScreen(onFinished: () -> Unit) {
                 .padding(start = 20.dp, end = 20.dp, top = 48.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // back button — only show if not on first file
+            if (currentIndex > 0) {
+                TextButton(
+                    onClick = { currentIndex-- },
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text(
+                        text = "← Back",
+                        fontSize = 14.sp,
+                        color = MintGreen,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.weight(1f))
             Text(
                 text = "Review session",
                 fontSize = 18.sp,
@@ -2428,18 +2405,18 @@ fun ReviewScreen(onFinished: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             files.forEachIndexed { index, _ ->
+                val dotColor = when {
+                    decisions[index] == FileDecision.DELETED -> Color(0xFFE24B4A)
+                    decisions[index] == FileDecision.KEPT    -> MintGreen
+                    index == currentIndex                    -> Color(0xFFEF9F27)
+                    else                                     -> Color(0xFFE0E0E0)
+                }
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .height(4.dp)
                         .clip(RoundedCornerShape(99.dp))
-                        .background(
-                            when {
-                                index < currentIndex  -> MintGreen
-                                index == currentIndex -> Color(0xFFEF9F27)
-                                else                  -> Color(0xFFE0E0E0)
-                            }
-                        )
+                        .background(dotColor)
                 )
             }
         }
@@ -2452,13 +2429,11 @@ fun ReviewScreen(onFinished: () -> Unit) {
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
             elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-            border = androidx.compose.foundation.BorderStroke(
-                0.5.dp, Color(0xFFE0E0E0)
-            )
+            border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFFE0E0E0))
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
 
-                // ── REAL THUMBNAIL ────────────────────
+                // ── THUMBNAIL ─────────────────────────
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -2466,16 +2441,9 @@ fun ReviewScreen(onFinished: () -> Unit) {
                         .background(Color(0xFF1A1A1A))
                         .clickable {
                             file.uri?.let { uri ->
-                                val intent = android.content.Intent(
-                                    android.content.Intent.ACTION_VIEW
-                                ).apply {
-                                    setDataAndType(
-                                        uri,
-                                        if (file.type == "Video") "video/*" else "image/*"
-                                    )
-                                    addFlags(
-                                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-                                    )
+                                val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                    setDataAndType(uri, if (file.type == "Video") "video/*" else "image/*")
+                                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                 }
                                 context.startActivity(intent)
                             }
@@ -2484,103 +2452,94 @@ fun ReviewScreen(onFinished: () -> Unit) {
                 ) {
                     if (file.uri != null) {
                         if (file.type == "Video") {
-                            // ── REAL VIDEO THUMBNAIL ──────────────────
                             val thumbnail = remember(file.uri) {
                                 try {
                                     val retriever = android.media.MediaMetadataRetriever()
                                     retriever.setDataSource(context, file.uri)
-                                    val bitmap = retriever.getFrameAtTime(
-                                        1_000_000, // get frame at 1 second
-                                        android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC
-                                    )
+                                    val bitmap = retriever.getFrameAtTime(1_000_000, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                                     retriever.release()
                                     bitmap
-                                } catch (e: Exception) {
-                                    null
-                                }
+                                } catch (e: Exception) { null }
                             }
-
                             if (thumbnail != null) {
                                 androidx.compose.foundation.Image(
                                     bitmap = thumbnail.asImageBitmap(),
                                     contentDescription = file.name,
                                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else {
-                                // fallback if frame extraction fails
-                                Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .background(Color(0xFF1A1A2A)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(text = "🎥", fontSize = 52.sp)
-                                }
+                                        // grey out if deleted
+                                        .then(if (isDeleted) Modifier.graphicsLayer(alpha = 0.35f) else Modifier)
+                                )
                             }
-
-                            // play button overlay
                             Box(
-                                modifier = Modifier
-                                    .size(64.dp)
-                                    .background(
-                                        Color.Black.copy(alpha = 0.6f),
-                                        RoundedCornerShape(99.dp)
-                                    ),
+                                modifier = Modifier.size(64.dp).background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(99.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(text = "▶", fontSize = 26.sp, color = Color.White)
                             }
-
                         } else {
-                            // ── PHOTO THUMBNAIL ───────────────────────
                             coil.compose.AsyncImage(
-                                model = coil.request.ImageRequest.Builder(context)
-                                    .data(file.uri)
-                                    .crossfade(true)
-                                    .build(),
+                                model = coil.request.ImageRequest.Builder(context).data(file.uri).crossfade(true).build(),
                                 contentDescription = file.name,
                                 contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .alpha(if (isDeleted) 0.35f else 1f)
                             )
                         }
 
+                        // DELETED overlay label
+                        if (isDeleted) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.3f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .background(Color(0xFFE24B4A), RoundedCornerShape(8.dp))
+                                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                                ) {
+                                    Text(
+                                        text = "Deleted — in bin",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+
                         // tap to view label
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(8.dp)
-                                .background(
-                                    Color.Black.copy(alpha = 0.45f),
-                                    RoundedCornerShape(8.dp)
-                                )
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "Tap to view full",
-                                fontSize = 10.sp,
-                                color = Color.White
-                            )
+                        if (!isDeleted) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(8.dp)
+                                    .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(text = "Tap to view full", fontSize = 10.sp, color = Color.White)
+                            }
                         }
 
                     } else {
                         Text(
                             text = when (file.type) {
-                                "Video"      -> "🎥"
-                                "PDF"        -> "📄"
-                                "Screenshot" -> "📋"
-                                else         -> "📸"
+                                "Video" -> "🎥"
+                                "PDF"   -> "📄"
+                                else    -> "📸"
                             },
                             fontSize = 52.sp
                         )
                     }
                 }
 
-                // ── FILE INFO ROW ─────────────────────
+                // ── FILE INFO ─────────────────────────
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
+                    modifier = Modifier.fillMaxWidth().padding(14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
@@ -2588,7 +2547,7 @@ fun ReviewScreen(onFinished: () -> Unit) {
                             text = file.name,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1A1A1A),
+                            color = if (isDeleted) Color(0xFF999999) else Color(0xFF1A1A1A),
                             maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
@@ -2601,142 +2560,186 @@ fun ReviewScreen(onFinished: () -> Unit) {
                     }
                     Box(
                         modifier = Modifier
-                            .background(Color(0xFFFFEDED), RoundedCornerShape(8.dp))
+                            .background(
+                                if (isDeleted) Color(0xFFEEEEEE) else Color(0xFFFFEDED),
+                                RoundedCornerShape(8.dp)
+                            )
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(
                             text = file.size,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFFA32D2D)
+                            color = if (isDeleted) Color(0xFF999999) else Color(0xFFA32D2D)
                         )
                     }
                 }
             }
         }
 
-        // ── SMART HINT ────────────────────────────────
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 4.dp)
-                .background(Color(0xFFFAEEDA), RoundedCornerShape(12.dp))
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(text = "💡", fontSize = 14.sp)
-            Text(
-                text = file.hint,
-                fontSize = 12.sp,
-                color = Color(0xFF854F0B),
-                lineHeight = 18.sp
-            )
+        // ── HINT ──────────────────────────────────────
+        if (!isDeleted) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 4.dp)
+                    .background(Color(0xFFFAEEDA), RoundedCornerShape(12.dp))
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(text = "💡", fontSize = 14.sp)
+                Text(text = file.hint, fontSize = 12.sp, color = Color(0xFF854F0B), lineHeight = 18.sp)
+            }
         }
-
-
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // ── DELETE / KEEP BUTTONS ─────────────────────
+        // ── UNDO BAR ──────────────────────────────────
+        if (showUndo) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 4.dp)
+                    .background(Color(0xFF1A1A1A), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "Added to bin", fontSize = 13.sp, color = Color.White)
+                    TextButton(
+                        onClick = {
+                            lastDeletedFile?.let {
+                                BinManager.restore(BinManager.items.lastOrNull() ?: return@TextButton)
+                                if (deletedCount > 0) deletedCount--
+                                decisions[currentIndex - 1] = FileDecision.UNDECIDED
+                                showUndo = false
+                                lastDeletedFile = null
+                            }
+                        }
+                    ) {
+                        Text(text = "Undo", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MintGreen)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // ── BUTTONS — changes based on decision ───────
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // DELETE
-            // DELETE
-            Button(
-                onClick = {
-                    lastDeletedFile = file
-                    BinManager.addToBin(file)
-                    deletedCount++
-                    val num = file.size
-                        .replace(" MB", "")
-                        .replace(" GB", "")
-                        .replace(" KB", "")
-                        .toDoubleOrNull() ?: 0.0
-                    freedMB += when {
-                        file.size.contains("GB") -> num * 1000
-                        file.size.contains("KB") -> num / 1000
-                        else                     -> num
-                    }
-                    currentIndex++
-                    showUndo = true
-                    scope.launch {
-                        kotlinx.coroutines.delay(3000L)
-                        showUndo = false
-                        lastDeletedFile = null
-                    }
-                },
-
-                modifier = Modifier
-                    .weight(1f)
-                    .height(100.dp),
-                shape = RoundedCornerShape(20.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFFFEDED),
-                    contentColor   = Color(0xFFA32D2D)
-                ),
-                elevation = ButtonDefaults.buttonElevation(0.dp)
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+            if (isDeleted) {
+                // ── RESTORE BUTTON — file was deleted ─
+                Button(
+                    onClick = {
+                        // restore from bin
+                        val binItem = BinManager.items.lastOrNull { it.name == file.name }
+                        if (binItem != null) {
+                            BinManager.restore(binItem)
+                            deletedCount--
+                        }
+                        decisions[currentIndex] = FileDecision.UNDECIDED
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(80.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MintGreen,
+                        contentColor   = Color.White
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(0.dp)
                 ) {
-                    Text(text = "🗑", fontSize = 28.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Delete",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = file.size,
-                        fontSize = 11.sp,
-                        color = Color(0xFFCC4444)
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(text = "↩", fontSize = 28.sp)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = "Restore", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text(text = "remove from bin", fontSize = 11.sp, color = Color.White.copy(alpha = 0.7f))
+                    }
                 }
-            }
 
-            // KEEP
-            Button(
-                onClick = { currentIndex++ },
-                modifier = Modifier
-                    .weight(1f)
-                    .height(100.dp),
-                shape = RoundedCornerShape(20.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFE8F7F1),
-                    contentColor   = Color(0xFF0F6E56)
-                ),
-                elevation = ButtonDefaults.buttonElevation(0.dp)
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+            } else {
+                // ── DELETE BUTTON ─────────────────────
+                Button(
+                    onClick = {
+                        lastDeletedFile = file
+                        BinManager.addToBin(file)
+                        deletedCount++
+                        val num = file.size
+                            .replace(" MB", "").replace(" GB", "").replace(" KB", "")
+                            .toDoubleOrNull() ?: 0.0
+                        freedMB += when {
+                            file.size.contains("GB") -> num * 1000
+                            file.size.contains("KB") -> num / 1000
+                            else                     -> num
+                        }
+                        decisions[currentIndex] = FileDecision.DELETED
+                        currentIndex++
+                        showUndo = true
+                        scope.launch {
+                            kotlinx.coroutines.delay(3000L)
+                            showUndo = false
+                            lastDeletedFile = null
+                        }
+                    },
+                    modifier = Modifier.weight(1f).height(100.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFFEDED),
+                        contentColor   = Color(0xFFA32D2D)
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(0.dp)
                 ) {
-                    Text(text = "✓", fontSize = 28.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Keep",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Keep it",
-                        fontSize = 11.sp,
-                        color = Color(0xFF0F6E56).copy(alpha = 0.6f)
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(text = "🗑", fontSize = 28.sp)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = "Delete", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text(text = file.size, fontSize = 11.sp, color = Color(0xFFCC4444))
+                    }
+                }
+
+                // ── KEEP BUTTON ───────────────────────
+                Button(
+                    onClick = {
+                        decisions[currentIndex] = FileDecision.KEPT
+                        currentIndex++
+                    },
+                    modifier = Modifier.weight(1f).height(100.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFE8F7F1),
+                        contentColor   = Color(0xFF0F6E56)
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(0.dp)
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(text = "✓", fontSize = 28.sp)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = "Keep", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text(text = "Keep it", fontSize = 11.sp, color = Color(0xFF0F6E56).copy(alpha = 0.6f))
+                    }
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-
-
-
     }
 }
 
@@ -2915,9 +2918,10 @@ fun BinScreen(onBack: () -> Unit) {
     var binItems   by remember { mutableStateOf(BinManager.items) }
     var showDialog by remember { mutableStateOf(false) }
 
-    // auto show confirm dialog when arriving from review
+    // auto show confirm dialog only when coming from review
     LaunchedEffect(Unit) {
-        if (binItems.isNotEmpty()) {
+        if (BinManager.isComingFromReview && binItems.isNotEmpty()) {
+            BinManager.isComingFromReview = false
             kotlinx.coroutines.delay(300L)
             showDialog = true
         }
@@ -2931,7 +2935,6 @@ fun BinScreen(onBack: () -> Unit) {
         if (result.resultCode == android.app.Activity.RESULT_OK) {
             BinManager.emptyBin()
             binItems = BinManager.items
-            // close app after deletion — like Gmail after sending
             (context as? android.app.Activity)?.finish()
         }
     }
@@ -2955,7 +2958,6 @@ fun BinScreen(onBack: () -> Unit) {
                         fontSize = 13.sp
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    // thumbnails preview row
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         binItems.take(4).forEach { item ->
                             Box(
@@ -2967,15 +2969,13 @@ fun BinScreen(onBack: () -> Unit) {
                             ) {
                                 if (item.uri != null) {
                                     if (item.type == "Video") {
-                                        // extract real video frame
                                         val thumbnail = remember(item.uri) {
                                             try {
                                                 val retriever = android.media.MediaMetadataRetriever()
                                                 retriever.setDataSource(context, item.uri)
                                                 val bitmap = retriever.getFrameAtTime(
                                                     1_000_000,
-                                                    android.media.MediaMetadataRetriever
-                                                        .OPTION_CLOSEST_SYNC
+                                                    android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC
                                                 )
                                                 retriever.release()
                                                 bitmap
@@ -2990,28 +2990,21 @@ fun BinScreen(onBack: () -> Unit) {
                                             )
                                         } else {
                                             Box(
-                                                modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .background(Color(0xFF2A2A2A)),
+                                                modifier = Modifier.fillMaxSize().background(Color(0xFF2A2A2A)),
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 Text(text = "Video", fontSize = 8.sp, color = Color.White)
                                             }
                                         }
-                                        // play icon overlay
                                         Box(
                                             modifier = Modifier
                                                 .size(22.dp)
-                                                .background(
-                                                    Color.Black.copy(alpha = 0.6f),
-                                                    RoundedCornerShape(99.dp)
-                                                ),
+                                                .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(99.dp)),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(text = "▶", fontSize = 8.sp, color = Color.White)
                                         }
                                     } else {
-                                        // photo
                                         coil.compose.AsyncImage(
                                             model = item.uri,
                                             contentDescription = item.name,
@@ -3061,7 +3054,6 @@ fun BinScreen(onBack: () -> Unit) {
                             }
                         )
                         binItems = BinManager.items
-                        // Android 10 and below — close directly
                         if (BinManager.count() == 0) {
                             (context as? android.app.Activity)?.finish()
                         }
@@ -3076,7 +3068,7 @@ fun BinScreen(onBack: () -> Unit) {
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text(
-                        text = "🗑  Yes, delete all permanently",
+                        text = "Yes, delete all permanently",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -3123,7 +3115,7 @@ fun BinScreen(onBack: () -> Unit) {
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF1A1A1A)
             )
-
+            Spacer(modifier = Modifier.weight(1f))
 
             if (binItems.isNotEmpty()) {
                 TextButton(onClick = { showDialog = true }) {
@@ -3155,7 +3147,7 @@ fun BinScreen(onBack: () -> Unit) {
                 )
             ) {
                 Text(
-                    text = "🗑  Delete all ${binItems.size} files permanently",
+                    text = "Delete all ${binItems.size} files permanently",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -3190,7 +3182,6 @@ fun BinScreen(onBack: () -> Unit) {
                 )
             }
         } else {
-            // ── BIN ITEMS LIST ────────────────────────
             Column(
                 modifier = Modifier
                     .weight(1f)
